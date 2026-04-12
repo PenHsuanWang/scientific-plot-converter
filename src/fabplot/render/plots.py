@@ -19,8 +19,8 @@ _builder = CanvasBuilder(FAB_STYLE_CONTEXT)
 
 
 def render_hist1d(
-    data: np.ndarray,
-    column_name: str,
+    data: np.ndarray | list[np.ndarray],
+    column_name: str | list[str],
     output_path: str | Path,
     norm: bool = False,
     metadata: dict[str, str] | None = None,
@@ -30,10 +30,15 @@ def render_hist1d(
 ) -> None:
     """Render and save a 1D histogram with smart binning and stats overlay.
 
-    :param data: Raw 1D array of the metric values to plot.
-    :type data: numpy.ndarray
-    :param column_name: Label for the X-axis and plot title.
-    :type column_name: str
+    When *data* is a list of arrays (and *column_name* a matching list of
+    strings), all series are plotted as overlaid, semi-transparent histograms
+    on a shared bin range using the Petroff palette.  The stats legend is
+    computed from the first series only.
+
+    :param data: One array **or** a list of arrays of metric values.
+    :type data: numpy.ndarray or list[numpy.ndarray]
+    :param column_name: Axis label — a single string or a list matching *data*.
+    :type column_name: str or list[str]
     :param output_path: Destination file path (.pdf or .svg).
     :type output_path: str or pathlib.Path
     :param norm: If ``True``, normalise to Yield Density (PDF).
@@ -47,30 +52,53 @@ def render_hist1d(
     :param context: Tier-3 context string (top-right, 60 % size).
     :type context: str or None
     """
-    valid_data = data[~np.isnan(data)]
+    # Normalise to lists for uniform multi-series handling
+    data_list: list[np.ndarray] = data if isinstance(data, list) else [data]
+    name_list: list[str] = (
+        column_name if isinstance(column_name, list) else [column_name]
+    )
+
     palette = FAB_STYLE_CONTEXT.petroff_palette
+    valid_arrays = [arr[~np.isnan(arr)] for arr in data_list]
+    multi = len(data_list) > 1
+
+    # Compute bin edges: shared range for overlays, smart count from first series
+    n_bins = calculate_smart_bins(valid_arrays[0])
+    bin_edges: int | list[float]
+    if multi:
+        g_min = float(min(float(arr.min()) for arr in valid_arrays if len(arr) > 0))
+        g_max = float(max(float(arr.max()) for arr in valid_arrays if len(arr) > 0))
+        bin_edges = list(np.linspace(g_min, g_max, n_bins + 1))
+    else:
+        bin_edges = n_bins
 
     with _builder.single_canvas(
         project=project, status=status, context=context
     ) as (fig, ax):
-        bins = calculate_smart_bins(valid_data)
+        alpha = 0.5 if multi else 0.7
+        for i, (valid, name) in enumerate(zip(valid_arrays, name_list)):
+            color = palette[i % len(palette)]
+            ax.hist(
+                valid, bins=bin_edges, density=norm,
+                color=color, edgecolor="black",
+                hatch="///", alpha=alpha,
+                label=name if multi else None,
+            )
+            ax.hist(
+                valid, bins=bin_edges, density=norm,
+                histtype="step", color=color, linewidth=1.5,
+            )
 
-        ax.hist(
-            valid_data, bins=bins, density=norm,
-            color=palette[0], edgecolor="black",
-            hatch="///", alpha=0.7,
-        )
-        ax.hist(
-            valid_data, bins=bins, density=norm,
-            histtype="step", color=palette[0], linewidth=1.5,
-        )
-
-        stats = calculate_metrics(valid_data)
+        stats = calculate_metrics(valid_arrays[0])
         add_stats_legend(ax, stats)
 
-        ax.set_xlabel(f"{column_name}")
+        if multi:
+            ax.legend(loc="best")
+
+        x_label = " / ".join(name_list)
+        ax.set_xlabel(x_label)
         ax.set_ylabel("Yield Density (PDF)" if norm else "Counts")
-        ax.set_title(f"Distribution Analysis: {column_name}")
+        ax.set_title(f"Distribution Analysis: {x_label}")
         ax.grid(True)
 
         fig.savefig(output_path)

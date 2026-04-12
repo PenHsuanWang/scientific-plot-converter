@@ -6,7 +6,7 @@ arguments, and delegates to the rendering pipeline.
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 
@@ -41,13 +41,43 @@ _CONTEXT = typer.Option(
 )
 
 
+def _resolve_output(output: Optional[str], stem: str, suffix: str) -> Path:
+    """Resolve the output path, routing bare filenames into ``figure_out/``.
+
+    :param output: Raw ``--output`` value from the CLI (may be ``None``).
+    :param stem: Input file stem used when building the default name.
+    :param suffix: Command suffix appended to the default name (e.g. ``"hist1d"``).
+    :returns: Absolute-ish ``Path`` ready for ``mkdir`` + ``savefig``.
+    :rtype: pathlib.Path
+
+    Rules:
+
+    * ``None`` → ``<cwd>/figure_out/<stem>_<suffix>.pdf``
+    * Bare filename (no directory component) → ``<cwd>/figure_out/<name>``
+    * Path with an explicit directory component → used as-is.
+    """
+    if output is None:
+        return Path.cwd() / "figure_out" / f"{stem}_{suffix}.pdf"
+    p = Path(output)
+    if p.parent == Path("."):
+        # Bare filename only — keep name/extension, route to figure_out/
+        return Path.cwd() / "figure_out" / p.name
+    return p
+
+
 @app.command()
 def hist1d(
     input: str = typer.Option(
         ..., "--input", "-i", help="Input CSV/Parquet file path."
     ),
-    x: str = typer.Option(
-        ..., "--x", "-x", help="Column name to plot on the X-axis."
+    x: List[str] = typer.Option(
+        ...,
+        "--x",
+        "-x",
+        help=(
+            "Column name(s) to plot. Repeat the flag to overlay multiple"
+            " distributions: --x col1 --x col2."
+        ),
     ),
     norm: bool = typer.Option(
         False,
@@ -71,24 +101,21 @@ def hist1d(
     """Generate a 1D histogram with smart binning and Cpk overlay."""
     try:
         df = load_data(input)
-        if x not in df.columns:
-            typer.secho(
-                f"Error: Column '{x}' not found in input data.",
-                fg=typer.colors.RED,
-            )
-            sys.exit(1)
+        for col in x:
+            if col not in df.columns:
+                typer.secho(
+                    f"Error: Column '{col}' not found in input data.",
+                    fg=typer.colors.RED,
+                )
+                sys.exit(1)
 
-        data_arr = df[x].to_numpy()
-        out_path = (
-            Path(output)
-            if output
-            else Path.cwd() / "figure_out" / (Path(input).stem + "_hist1d.pdf")
-        )
+        data_arrays = [df[col].to_numpy() for col in x]
+        out_path = _resolve_output(output, Path(input).stem, "hist1d")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         render_hist1d(
-            data_arr,
-            column_name=x,
+            data_arrays,
+            column_name=list(x),
             output_path=out_path,
             norm=norm,
             project=project,
@@ -147,11 +174,7 @@ def trend(
 
         x_arr = df[x].to_numpy()
         y_arr = df[y].to_numpy()
-        out_path = (
-            Path(output)
-            if output
-            else Path.cwd() / "figure_out" / (Path(input).stem + "_trend.pdf")
-        )
+        out_path = _resolve_output(output, Path(input).stem, "trend")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         render_trend(
@@ -224,11 +247,7 @@ def compare(
         y1_arr = df[y1].to_numpy()
         y2_arr = df[y2].to_numpy()
 
-        out_path = (
-            Path(output)
-            if output
-            else Path.cwd() / "figure_out" / (Path(input).stem + "_compare.pdf")
-        )
+        out_path = _resolve_output(output, Path(input).stem, "compare")
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         render_compare(

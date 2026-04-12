@@ -209,10 +209,14 @@ class CanvasBuilder:
         fig, ax = plt.subplots(figsize=figsize)
         self._apply_margins(fig)
         self._apply_axis_styling(ax)
+        # Annotations must be added BEFORE yield so that fig.savefig() called
+        # inside the `with` block captures them.  The canvas.draw() inside
+        # add_three_tier_typography uses the renderer on the (already-margined)
+        # empty axes to measure Tier-1 text width — this is correct and safe.
+        self.add_three_tier_typography(fig, project, status, context)
         try:
             yield fig, ax
         finally:
-            self.add_three_tier_typography(fig, project, status, context)
             plt.close(fig)
 
     @contextmanager
@@ -251,10 +255,11 @@ class CanvasBuilder:
         # Fuse panels: hide upper X-tick labels, keep tick lines
         ax_main.tick_params(labelbottom=False)
 
+        # Annotations before yield — same reason as single_canvas.
+        self.add_three_tier_typography(fig, project, status, context)
         try:
             yield fig, ax_main, ax_ratio
         finally:
-            self.add_three_tier_typography(fig, project, status, context)
             plt.close(fig)
 
 
