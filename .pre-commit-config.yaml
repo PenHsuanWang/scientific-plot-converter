@@ -1,0 +1,48 @@
+exclude: '^src/.*\.egg-info/'
+
+default_language_version:
+  python: python3.13
+
+repos:
+  # ── Basic file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  # ── Ruff: fast linting and import ordering ────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.2.2
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  # ── Flake8: PEP 8 style + PEP 287 reStructuredText docstrings ────────────
+  - repo: local
+    hooks:
+      - id: flake8
+        name: flake8 (PEP 8 + PEP 287 docstrings)
+        language: python
+        entry: flake8
+        types: [python]
+        files: ^(src|tests)/
+        additional_dependencies:
+          - flake8>=7.0.0
+          - flake8-docstrings>=1.7.0
+
+  # ── mypy: strict static type checking ────────────────────────────────────
+  # Uses `language: system` so it resolves imports from the project venv.
+  # Run `uv pip install -e ".[dev]"` before committing.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict type checking)
+        language: system
+        entry: mypy
+        types: [python]
+        pass_filenames: false
+        args: [src/]

@@ -1,0 +1,247 @@
+# FabPlot-CLI
+
+A standardized Python Command-Line Interface (CLI) utility designed to generate publication-quality, "Scientific-Grade" visualizations from semiconductor manufacturing data (CSV/Parquet).
+
+**FabPlot-CLI** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces a strict corporate/research style (the "CERN Layout") for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
+
+## Features
+
+- **"Scientific Style" Enforcement:** Automatically applies locked typography (10pt/12pt Arial/Helvetica), high-contrast color-blind friendly palettes (with hatching), and strict vector outputs (`.pdf`, `.svg`) to prevent pixelation.
+- **The "Fab-Header":** Automatically renders standardized metadata blocks (File Name, Record Count, etc.) and a statistical legend ($N$, $\mu$, $\sigma$, $C_{pk}$) directly on the canvas without obscuring the data.
+- **High-Performance Ingestion:** Powered by `Polars` to rapidly ingest and process massive multi-column CSV and Parquet files commonly found in Fab environments.
+- **Smart Analytics:**
+  - **hist1d:** Distribution Analysis with smart binning (using the Freedman-Diaconis rule to avoid aliasing in semiconductor distributions) and Yield Density (PDF) normalization.
+  - **trend:** Time-Series or Lot-Series analysis with automatic Control Limits (UCL/LCL at $\pm 3\sigma$) rendered as subtle shaded regions.
+
+## Prerequisites
+
+- Python 3.12 or higher.
+- [uv](https://github.com/astral-sh/uv) (recommended for fast dependency management).
+
+## Installation
+
+Clone the repository and install the package in development mode using `uv`:
+
+```bash
+git clone <repository_url>
+cd scientific-plot-converter
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+## Usage
+
+You can invoke the CLI using the `fabplot` command. To see all available commands and options, use the `--help` flag:
+
+```bash
+fabplot --help
+```
+
+### 1. Distribution Analysis (`hist1d`)
+
+Generate a 1D histogram to visually analyze yield distribution and compare lots.
+
+```bash
+# Basic usage (outputs to data_hist1d.pdf by default)
+fabplot hist1d --input data.csv --x CD_Value
+
+# Normalize to Yield Density (PDF) and specify custom output
+fabplot hist1d --input process_data.parquet --x Threshold_Voltage --norm --output yield_dist.svg
+```
+
+### 2. Trend Analysis (`trend`)
+
+Plot a metric over time or lot number to identify process drifts or excursions.
+
+```bash
+# Plot CD_Value over LotID
+fabplot trend --input lot_summary.csv --x LotID --y CD_Value
+```
+
+---
+
+## Development
+
+### Project Structure
+
+```
+scientific-plot-converter/
+├── src/fabplot/
+│   ├── cli.py            # Typer entry points and CLI command definitions
+│   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
+│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk) and smart binning
+│   └── render/           # Matplotlib engine enforcing the "CERN Layout"
+├── tests/
+│   └── test_cli.py       # pytest test suite
+├── .pre-commit-config.yaml
+├── tox.ini
+├── pyproject.toml
+└── .github/workflows/ci.yml
+```
+
+---
+
+### Step 1 — One-Time Local Setup
+
+After cloning and installing dependencies (see [Installation](#installation)), register the pre-commit hooks into your local git repository:
+
+```bash
+pre-commit install
+```
+
+This installs a `.git/hooks/pre-commit` script that automatically runs all quality checks every time you run `git commit`.
+
+> **Note:** The `mypy` hook uses `language: system`, meaning it resolves imports from your active virtual environment. Always activate `.venv` before committing.
+
+---
+
+### Step 2 — Write Code
+
+The codebase enforces two style standards:
+
+| Standard | Scope | Tool |
+|---|---|---|
+| [PEP 8](https://peps.python.org/pep-0008/) | Formatting, naming, line length (≤88 chars) | `ruff`, `flake8` |
+| [PEP 287](https://peps.python.org/pep-0287/) | reStructuredText docstrings | `flake8-docstrings` |
+
+Every public function and class must carry a reST docstring:
+
+```python
+def compute_stats(data: pl.Series) -> dict[str, float]:
+    """Compute descriptive statistics for a data series.
+
+    :param data: A Polars Series of numeric measurements.
+    :type data: pl.Series
+    :returns: Mapping of statistic name to value (n, mean, std, cpk).
+    :rtype: dict[str, float]
+    :raises ValueError: If the series is empty.
+    """
+```
+
+---
+
+### Step 3 — Commit (pre-commit hooks fire automatically)
+
+When you run `git commit`, the following hooks execute in order:
+
+```
+git commit -m "feat: add new plot type"
+```
+
+| Hook | What it checks / fixes |
+|---|---|
+| `trailing-whitespace` | Strips trailing spaces from all files |
+| `end-of-file-fixer` | Ensures every file ends with a single newline |
+| `check-yaml` | Validates YAML syntax |
+| `check-added-large-files` | Rejects files > 500 KB |
+| `ruff --fix` | Fast PEP 8 lint; auto-fixes safe issues |
+| `flake8` | PEP 8 style + PEP 287 docstring enforcement on `src/` and `tests/` |
+| `mypy src/` | Strict static type checking across the entire package |
+
+If any hook reports an error, the commit is **blocked**. Fix the reported issues and re-stage your files:
+
+```bash
+git add -u
+git commit -m "feat: add new plot type"   # hooks re-run
+```
+
+---
+
+### Step 4 — Run the Full Check Suite Locally with `tox`
+
+Before pushing, reproduce the exact CI environment locally using `tox`. This catches any issues that only appear in an isolated, freshly built package:
+
+```bash
+# Run both environments (lint + test)
+tox
+
+# Or target a single environment
+tox -e lint    # ruff + flake8 + mypy
+tox -e test    # pytest --cov=fabplot
+```
+
+`tox` builds a source distribution from `pyproject.toml`, installs it into an isolated virtualenv, then runs the commands — mirroring exactly what GitHub Actions does.
+
+Expected output on a clean codebase:
+
+```
+lint: OK ✔
+test: OK ✔
+  congratulations :)
+```
+
+---
+
+### Step 5 — Push and CI
+
+Once your commit is pushed to GitHub, the CI pipeline (`.github/workflows/ci.yml`) triggers automatically on every push and pull request to `main`.
+
+#### CI Jobs
+
+```
+push / pull_request
+        │
+        ├─── Job: pre-commit
+        │         ├── Install project deps (needed by mypy system hook)
+        │         ├── Install pre-commit
+        │         └── pre-commit run --all-files
+        │
+        └─── Job: tox (matrix)
+                  ├── tox -e lint   →  ruff + flake8 + mypy
+                  └── tox -e test   →  pytest --cov=fabplot
+```
+
+The two tox matrix jobs run in parallel. All three jobs must pass before a pull request can be merged.
+
+---
+
+### Running Individual Tools Manually
+
+```bash
+# Ruff (fast lint)
+ruff check src tests
+
+# Flake8 (PEP 8 + PEP 287 docstrings)
+flake8 src tests
+
+# mypy (strict types)
+mypy src
+
+# pytest with coverage
+pytest --cov=fabplot --cov-report=term-missing
+
+# Run all pre-commit hooks without committing
+pre-commit run --all-files
+```
+
+---
+
+### Complete Developer Workflow at a Glance
+
+```
+1. git clone + uv pip install -e ".[dev]"   # one-time setup
+2. pre-commit install                         # one-time: register git hooks
+        ↓
+3. Edit source code in src/fabplot/
+        ↓
+4. git add <files>
+        ↓
+5. git commit -m "..."
+   └── pre-commit hooks run automatically
+       trailing-whitespace ✔  end-of-file-fixer ✔  check-yaml ✔
+       ruff --fix ✔  flake8 ✔  mypy ✔
+       → blocked if any check fails; fix and re-stage
+        ↓
+6. tox                  # optional but recommended before push
+   └── lint ✔  test ✔
+        ↓
+7. git push origin <branch>
+        ↓
+8. GitHub Actions CI
+   ├── pre-commit (all hooks)  ✔
+   ├── tox -e lint             ✔
+   └── tox -e test             ✔
+        ↓
+9. Open / merge Pull Request
+```

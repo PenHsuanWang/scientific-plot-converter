@@ -1,0 +1,104 @@
+Metadata-Version: 2.4
+Name: fabplot-cli
+Version: 0.1.0
+Summary: A standardized Python CLI utility to generate publication-quality, 'Scientific-Grade' visualizations from Fab CSV data.
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: typer>=0.12.0
+Requires-Dist: polars>=0.20.0
+Requires-Dist: matplotlib>=3.8.0
+Requires-Dist: pyyaml>=6.0.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: scipy>=1.12.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+Requires-Dist: sphinx>=7.2.6; extra == "dev"
+Requires-Dist: ruff>=0.2.2; extra == "dev"
+Requires-Dist: flake8>=7.0.0; extra == "dev"
+Requires-Dist: flake8-docstrings>=1.7.0; extra == "dev"
+Requires-Dist: mypy>=1.9.0; extra == "dev"
+Requires-Dist: pre-commit>=3.7.0; extra == "dev"
+Requires-Dist: tox>=4.14.0; extra == "dev"
+
+# FabPlot-CLI
+
+A standardized Python Command-Line Interface (CLI) utility designed to generate publication-quality, "Scientific-Grade" visualizations from semiconductor manufacturing data (CSV/Parquet).
+
+**FabPlot-CLI** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces a strict corporate/research style (the "CERN Layout") for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
+
+## Features
+
+- **"Scientific Style" Enforcement:** Automatically applies locked typography (10pt/12pt Arial/Helvetica), high-contrast color-blind friendly palettes (with hatching), and strict vector outputs (`.pdf`, `.svg`) to prevent pixelation.
+- **The "Fab-Header":** Automatically renders standardized metadata blocks (File Name, Record Count, etc.) and a statistical legend ($N$, $\mu$, $\sigma$, $C_{pk}$) directly on the canvas without obscuring the data.
+- **High-Performance Ingestion:** Powered by `Polars` to rapidly ingest and process massive multi-column CSV and Parquet files commonly found in Fab environments.
+- **Smart Analytics:**
+  - **hist1d:** Distribution Analysis with smart binning (using the Freedman-Diaconis rule to avoid aliasing in semiconductor distributions) and Yield Density (PDF) normalization.
+  - **trend:** Time-Series or Lot-Series analysis with automatic Control Limits (UCL/LCL at $\pm 3\sigma$) rendered as subtle shaded regions.
+
+## Prerequisites
+
+- Python 3.12 or higher.
+- [uv](https://github.com/astral-sh/uv) (recommended for fast dependency management).
+
+## Installation
+
+Clone the repository and install the package in development mode using `uv`:
+
+```bash
+git clone <repository_url>
+cd scientific-plot-converter
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+## Usage
+
+You can invoke the CLI using the `fabplot` command. To see all available commands and options, use the `--help` flag:
+
+```bash
+fabplot --help
+```
+
+### 1. Distribution Analysis (`hist1d`)
+
+Generate a 1D histogram to visually analyze yield distribution and compare lots.
+
+```bash
+# Basic usage (outputs to data_hist1d.pdf by default)
+fabplot hist1d --input data.csv --x CD_Value
+
+# Normalize to Yield Density (PDF) and specify custom output
+fabplot hist1d --input process_data.parquet --x Threshold_Voltage --norm --output yield_dist.svg
+```
+
+### 2. Trend Analysis (`trend`)
+
+Plot a metric over time or lot number to identify process drifts or excursions.
+
+```bash
+# Plot CD_Value over LotID
+fabplot trend --input lot_summary.csv --x LotID --y CD_Value
+```
+
+## Development
+
+The project structure is organized according to Domain-Driven Design (DDD) principles:
+
+- `src/fabplot/cli.py`: Typer application entry points and CLI command definitions.
+- `src/fabplot/data/io.py`: Polars wrappers for high-speed data ingestion and validation.
+- `src/fabplot/stats/metrics.py`: Core statistical calculations ($N$, $\mu$, $\sigma$, $C_{pk}$) and smart binning rules.
+- `src/fabplot/render/`: Matplotlib rendering engine and plot builders enforcing the strict "CERN Layout".
+
+### Running Tests & Linting
+
+Ensure code quality and reliability by running the test suite and linter:
+
+```bash
+# Run the Ruff linter
+uv run ruff check .
+
+# Run the Pytest suite
+uv run pytest
+```
