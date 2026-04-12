@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fabplot.data.io &#8212; FabPlot-CLI 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for fabplot.data.io</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Data ingestion utilities for loading CSV and Parquet files via Polars.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">polars</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pl</span>
+
+
+<div class="viewcode-block" id="load_data">
+<a class="viewcode-back" href="../../../api/data.html#fabplot.data.io.load_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load tabular data from CSV or Parquet into memory using Polars.</span>
+
+<span class="sd">    Handles null values commonly found in Fab data.</span>
+
+<span class="sd">    :param file_path: The absolute or relative path to the data file.</span>
+<span class="sd">    :type file_path: str or pathlib.Path</span>
+<span class="sd">    :returns: A Polars DataFrame containing the ingested data.</span>
+<span class="sd">    :rtype: polars.DataFrame</span>
+<span class="sd">    :raises FileNotFoundError: If the file does not exist.</span>
+<span class="sd">    :raises ValueError: If the file format is not supported.</span>
+<span class="sd">    :raises RuntimeError: If Polars fails to parse the file.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Input file not found: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">suffix</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.parquet&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pl</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.csv&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pl</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">null_values</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;NaN&quot;</span><span class="p">,</span> <span class="s2">&quot;NA&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported file format: </span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">. Must be .csv or .parquet.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Failed to ingest data from </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">FabPlot-CLI</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/cli.html">CLI Entry Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/data.html">Data I/O</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/stats.html">Statistics &amp; Metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/render.html">Render Engine &amp; Plots</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

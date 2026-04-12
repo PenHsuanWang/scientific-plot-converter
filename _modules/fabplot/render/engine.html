@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fabplot.render.engine &#8212; FabPlot-CLI 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for fabplot.render.engine</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Matplotlib rendering engine enforcing the scientific layout standard.</span>
+
+<span class="sd">Implements the ``FabStyleContext`` value object and ``CanvasBuilder`` class</span>
+<span class="sd">that together enforce the three-tier typography hierarchy, golden margin</span>
+<span class="sd">layout, four-sided mirror ticks, and the Petroff-compliant color palette</span>
+<span class="sd">across all FabPlot output.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Final</span><span class="p">,</span> <span class="n">Generator</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mpl</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.gridspec</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gridspec</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cycler</span><span class="w"> </span><span class="kn">import</span> <span class="n">cycler</span> <span class="k">as</span> <span class="n">make_cycler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.figure</span><span class="w"> </span><span class="kn">import</span> <span class="n">Figure</span>
+
+
+<div class="viewcode-block" id="FabStyleContext">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.FabStyleContext">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FabStyleContext</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Immutable value object holding all FabPlot styling constants.</span>
+
+<span class="sd">    All fields are frozen at class definition. Changing any constant</span>
+<span class="sd">    requires a versioned library release — runtime mutation is prohibited</span>
+<span class="sd">    by the ``frozen=True`` constraint.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># ── Typography ────────────────────────────────────────────────────────</span>
+    <span class="n">font_family</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;Arial&quot;</span><span class="p">,</span> <span class="s2">&quot;Helvetica&quot;</span><span class="p">,</span> <span class="s2">&quot;DejaVu Sans&quot;</span><span class="p">)</span>
+    <span class="c1"># base_font_size (10 pt) → tick labels, legend text, stats box.</span>
+    <span class="c1"># title_font_size (12 pt) → X/Y axis label titles AND plot title</span>
+    <span class="c1">#   (≈ CMS/HEP 5 % canvas-height rule for axis titles; 4 % for tick labels).</span>
+    <span class="n">base_font_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
+    <span class="n">title_font_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">12.0</span>
+    <span class="c1"># Three-tier annotation base (Tier-1 = 1.0 ×, i.e. 14 pt).</span>
+    <span class="c1"># Tier-3 at 60 % → 8.4 pt, above the 8 pt legibility floor.</span>
+    <span class="n">annotation_font_size</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">14.0</span>
+
+    <span class="c1"># Three-tier size ratios (locked — do not override)</span>
+    <span class="n">tier1_size_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.00</span>   <span class="c1"># Bold  — brand / project tag</span>
+    <span class="n">tier2_size_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.77</span>   <span class="c1"># Italic — status tag (75–80 %)</span>
+    <span class="n">tier3_size_ratio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.60</span>   <span class="c1"># Regular — context info</span>
+
+    <span class="c1"># ── Golden margins (fraction of figure size) ──────────────────────────</span>
+    <span class="n">margin_left</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.15</span>
+    <span class="n">margin_right</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span>   <span class="c1"># right plot edge at 1 − 0.05 = 0.95</span>
+    <span class="n">margin_top</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.09</span>     <span class="c1"># top plot edge at  1 − 0.09 = 0.91</span>
+    <span class="n">margin_bottom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.12</span>
+
+    <span class="c1"># ── Petroff-compliant color palette ───────────────────────────────────</span>
+    <span class="n">petroff_palette</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;#3f90da&quot;</span><span class="p">,</span>  <span class="c1"># dark blue  (primary)</span>
+        <span class="s2">&quot;#ffa90e&quot;</span><span class="p">,</span>  <span class="c1"># orange</span>
+        <span class="s2">&quot;#bd1f01&quot;</span><span class="p">,</span>  <span class="c1"># dark red</span>
+        <span class="s2">&quot;#94a4a2&quot;</span><span class="p">,</span>  <span class="c1"># gray</span>
+        <span class="s2">&quot;#832db6&quot;</span><span class="p">,</span>  <span class="c1"># purple</span>
+        <span class="s2">&quot;#a96b59&quot;</span><span class="p">,</span>  <span class="c1"># brown</span>
+        <span class="s2">&quot;#e76300&quot;</span><span class="p">,</span>  <span class="c1"># dark orange</span>
+        <span class="s2">&quot;#b9ac70&quot;</span><span class="p">,</span>  <span class="c1"># tan</span>
+        <span class="s2">&quot;#717581&quot;</span><span class="p">,</span>  <span class="c1"># dark gray</span>
+        <span class="s2">&quot;#92dadd&quot;</span><span class="p">,</span>  <span class="c1"># light blue</span>
+    <span class="p">)</span>
+
+    <span class="c1"># ── Axis styling ──────────────────────────────────────────────────────</span>
+    <span class="n">tick_direction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;in&quot;</span>
+    <span class="c1"># X-axis title pad: 1.1 × base_font_size (= 11 pt).</span>
+    <span class="c1"># Y-axis title pad: 1.4 × base_font_size (= 14 pt) — extra room for</span>
+    <span class="c1"># scientific-notation exponents (e.g., ×10³) that sit outside tick labels.</span>
+    <span class="n">axis_x_label_pad</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">11.0</span>
+    <span class="n">axis_y_label_pad</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">14.0</span>
+
+    <span class="c1"># ── Tick label overflow guard ──────────────────────────────────────────</span>
+    <span class="c1"># X-axis labels longer than this (chars) trigger 45° auto-rotation,</span>
+    <span class="c1"># preventing datetime strings and other long tokens from crowding.</span>
+    <span class="n">tick_label_rotation_threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span>
+    <span class="n">tick_label_max_rotation</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">45.0</span></div>
+
+
+
+<span class="c1">#: Module-level singleton — the one authoritative style instance.</span>
+<span class="n">FAB_STYLE_CONTEXT</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="n">FabStyleContext</span><span class="p">]</span> <span class="o">=</span> <span class="n">FabStyleContext</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="CanvasBuilder">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.CanvasBuilder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CanvasBuilder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Applies ``FabStyleContext`` rules to Matplotlib figures.</span>
+
+<span class="sd">    Responsible for:</span>
+
+<span class="sd">    * Activating the Petroff color cycle and locked typography via</span>
+<span class="sd">      ``rcParams``.</span>
+<span class="sd">    * Applying the golden margin ratios via ``fig.subplots_adjust``.</span>
+<span class="sd">    * Configuring four-sided, inward mirror ticks and axis label padding.</span>
+<span class="sd">    * Rendering the three-tier typography annotation layer.</span>
+<span class="sd">    * Providing context managers for single-panel and 7:3 composite</span>
+<span class="sd">      figure layouts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">style</span><span class="p">:</span> <span class="n">FabStyleContext</span> <span class="o">=</span> <span class="n">FAB_STYLE_CONTEXT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise the builder with the given style context.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_style</span> <span class="o">=</span> <span class="n">style</span>
+
+    <span class="c1"># ── Private helpers ───────────────────────────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_global_style</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Push locked rcParams: Petroff cycle, fonts, vector output.&quot;&quot;&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_style</span>
+        <span class="n">mpl</span><span class="o">.</span><span class="n">rcParams</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+            <span class="s2">&quot;font.family&quot;</span><span class="p">:</span> <span class="s2">&quot;sans-serif&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;font.sans-serif&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">font_family</span><span class="p">),</span>
+            <span class="c1"># Global fallback; overridden by the specific keys below.</span>
+            <span class="s2">&quot;font.size&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">base_font_size</span><span class="p">,</span>
+            <span class="c1"># Plot title above the axes frame — 12 pt (≈ CMS 5 %).</span>
+            <span class="s2">&quot;axes.titlesize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">title_font_size</span><span class="p">,</span>
+            <span class="s2">&quot;axes.titleweight&quot;</span><span class="p">:</span> <span class="s2">&quot;normal&quot;</span><span class="p">,</span>    <span class="c1"># Regular; Bold reserved for Tier-1</span>
+            <span class="c1"># X/Y axis label titles — 12 pt (≈ CMS 5 %).</span>
+            <span class="s2">&quot;axes.labelsize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">title_font_size</span><span class="p">,</span>
+            <span class="s2">&quot;axes.labelweight&quot;</span><span class="p">:</span> <span class="s2">&quot;normal&quot;</span><span class="p">,</span>    <span class="c1"># Regular; Bold reserved for Tier-1</span>
+            <span class="c1"># Tick mark numbers — 10 pt (≈ CMS 4 %).</span>
+            <span class="s2">&quot;xtick.labelsize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">base_font_size</span><span class="p">,</span>
+            <span class="s2">&quot;ytick.labelsize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">base_font_size</span><span class="p">,</span>
+            <span class="c1"># Legend and figure title — 10 pt / Regular.</span>
+            <span class="s2">&quot;legend.fontsize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">base_font_size</span><span class="p">,</span>
+            <span class="s2">&quot;figure.titlesize&quot;</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">title_font_size</span><span class="p">,</span>
+            <span class="s2">&quot;figure.titleweight&quot;</span><span class="p">:</span> <span class="s2">&quot;normal&quot;</span><span class="p">,</span>  <span class="c1"># Regular; Bold reserved for Tier-1</span>
+            <span class="s2">&quot;axes.prop_cycle&quot;</span><span class="p">:</span> <span class="n">make_cycler</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">petroff_palette</span><span class="p">)),</span>
+            <span class="s2">&quot;axes.linewidth&quot;</span><span class="p">:</span> <span class="mf">1.2</span><span class="p">,</span>
+            <span class="s2">&quot;lines.linewidth&quot;</span><span class="p">:</span> <span class="mf">1.5</span><span class="p">,</span>
+            <span class="s2">&quot;grid.alpha&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span>
+            <span class="s2">&quot;grid.linestyle&quot;</span><span class="p">:</span> <span class="s2">&quot;--&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;savefig.format&quot;</span><span class="p">:</span> <span class="s2">&quot;pdf&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;pdf.fonttype&quot;</span><span class="p">:</span> <span class="mi">42</span><span class="p">,</span>    <span class="c1"># TrueType — vector-safe</span>
+            <span class="s2">&quot;svg.fonttype&quot;</span><span class="p">:</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;legend.frameon&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_margins</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fig</span><span class="p">:</span> <span class="n">Figure</span><span class="p">,</span> <span class="n">hspace</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set golden margin ratios on the figure via ``subplots_adjust``.&quot;&quot;&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_style</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span>
+            <span class="n">left</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">margin_left</span><span class="p">,</span>
+            <span class="n">right</span><span class="o">=</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">s</span><span class="o">.</span><span class="n">margin_right</span><span class="p">,</span>
+            <span class="n">bottom</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">margin_bottom</span><span class="p">,</span>
+            <span class="n">top</span><span class="o">=</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">s</span><span class="o">.</span><span class="n">margin_top</span><span class="p">,</span>
+            <span class="n">hspace</span><span class="o">=</span><span class="n">hspace</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_axis_styling</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="p">:</span> <span class="n">Axes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable four-sided inward mirror ticks and pad axis titles.&quot;&quot;&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_style</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span>
+            <span class="n">which</span><span class="o">=</span><span class="s2">&quot;both&quot;</span><span class="p">,</span>
+            <span class="n">direction</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">tick_direction</span><span class="p">,</span>
+            <span class="n">top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">bottom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">xaxis</span><span class="o">.</span><span class="n">labelpad</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">axis_x_label_pad</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">labelpad</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">axis_y_label_pad</span>
+
+    <span class="c1"># ── Public API ────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CanvasBuilder.autoadjust_xticklabels">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.CanvasBuilder.autoadjust_xticklabels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">autoadjust_xticklabels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ax</span><span class="p">:</span> <span class="n">Axes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rotate X-axis tick labels when they would overlap or are too long.</span>
+
+<span class="sd">        Triggers a canvas draw to finalise tick positions, then checks</span>
+<span class="sd">        two conditions — bounding-box overlap between adjacent labels and</span>
+<span class="sd">        label character count — and rotates all X-tick labels to</span>
+<span class="sd">        ``tick_label_max_rotation`` degrees (right-aligned) when either</span>
+<span class="sd">        condition is met.  Y-axis labels are never modified.</span>
+
+<span class="sd">        Call this method after all plot data and axis limits have been set,</span>
+<span class="sd">        immediately before ``fig.savefig()``.</span>
+
+<span class="sd">        :param ax: The axes whose X tick labels to inspect and adjust.</span>
+<span class="sd">        :type ax: matplotlib.axes.Axes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_figure</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">fig</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">fig</span><span class="o">.</span><span class="n">canvas</span><span class="o">.</span><span class="n">draw</span><span class="p">()</span>   <span class="c1"># finalise tick label text and pixel positions</span>
+
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="n">lbl</span> <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_xticklabels</span><span class="p">()</span> <span class="k">if</span> <span class="n">lbl</span><span class="o">.</span><span class="n">get_text</span><span class="p">()]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_style</span>
+        <span class="n">max_chars</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">lbl</span><span class="o">.</span><span class="n">get_text</span><span class="p">())</span> <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">)</span>
+
+        <span class="n">bboxes</span> <span class="o">=</span> <span class="p">[</span><span class="n">lbl</span><span class="o">.</span><span class="n">get_window_extent</span><span class="p">()</span> <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
+        <span class="n">overlapping</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">bboxes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">x1</span> <span class="o">&gt;</span> <span class="n">bboxes</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">x0</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">bboxes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">overlapping</span> <span class="ow">or</span> <span class="n">max_chars</span> <span class="o">&gt;</span> <span class="n">s</span><span class="o">.</span><span class="n">tick_label_rotation_threshold</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">setp</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">tick_label_max_rotation</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CanvasBuilder.add_three_tier_typography">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.CanvasBuilder.add_three_tier_typography">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_three_tier_typography</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">fig</span><span class="p">:</span> <span class="n">Figure</span><span class="p">,</span>
+        <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render the three-tier annotation layer in the reserved top margin.</span>
+
+<span class="sd">        * **Tier 1** (Bold, top-left): brand / project identifier.</span>
+<span class="sd">        * **Tier 2** (Italic, ~77 % size, same line): data status tag.</span>
+<span class="sd">        * **Tier 3** (Regular, ~60 % size, top-right): context metadata.</span>
+
+<span class="sd">        :param fig: The figure to annotate.</span>
+<span class="sd">        :param project: Tier-1 brand or project name.</span>
+<span class="sd">        :param status: Tier-2 status label (e.g. ``&quot;Internal Use Only&quot;``).</span>
+<span class="sd">        :param context: Tier-3 context string (e.g. ``&quot;2024-Q3 | N=1000&quot;``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_style</span>
+        <span class="n">tier1_fs</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">annotation_font_size</span> <span class="o">*</span> <span class="n">s</span><span class="o">.</span><span class="n">tier1_size_ratio</span>
+        <span class="n">tier2_fs</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">annotation_font_size</span> <span class="o">*</span> <span class="n">s</span><span class="o">.</span><span class="n">tier2_size_ratio</span>
+        <span class="n">tier3_fs</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">annotation_font_size</span> <span class="o">*</span> <span class="n">s</span><span class="o">.</span><span class="n">tier3_size_ratio</span>
+
+        <span class="c1"># Vertical centre of the reserved top margin in figure coordinates</span>
+        <span class="n">y_mid</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">s</span><span class="o">.</span><span class="n">margin_top</span> <span class="o">/</span> <span class="mf">2.0</span>
+        <span class="n">x_left</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">margin_left</span>
+        <span class="n">x_right</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">s</span><span class="o">.</span><span class="n">margin_right</span>
+
+        <span class="k">if</span> <span class="n">project</span><span class="p">:</span>
+            <span class="n">t1</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                <span class="n">x_left</span><span class="p">,</span> <span class="n">y_mid</span><span class="p">,</span> <span class="n">project</span><span class="p">,</span>
+                <span class="n">fontsize</span><span class="o">=</span><span class="n">tier1_fs</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">,</span>
+                <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">status</span><span class="p">:</span>
+                <span class="c1"># Draw to resolve font metrics, then measure Tier-1 right edge</span>
+                <span class="n">fig</span><span class="o">.</span><span class="n">canvas</span><span class="o">.</span><span class="n">draw</span><span class="p">()</span>
+                <span class="n">renderer</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">canvas</span><span class="o">.</span><span class="n">get_renderer</span><span class="p">()</span>  <span class="c1"># type: ignore[attr-defined]</span>
+                <span class="n">bb</span> <span class="o">=</span> <span class="n">t1</span><span class="o">.</span><span class="n">get_window_extent</span><span class="p">(</span><span class="n">renderer</span><span class="o">=</span><span class="n">renderer</span><span class="p">)</span>
+                <span class="n">bb_fig</span> <span class="o">=</span> <span class="n">bb</span><span class="o">.</span><span class="n">transformed</span><span class="p">(</span><span class="n">fig</span><span class="o">.</span><span class="n">transFigure</span><span class="o">.</span><span class="n">inverted</span><span class="p">())</span>
+                <span class="n">fig</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                    <span class="n">bb_fig</span><span class="o">.</span><span class="n">x1</span> <span class="o">+</span> <span class="mf">0.008</span><span class="p">,</span> <span class="n">y_mid</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span>
+                    <span class="n">fontsize</span><span class="o">=</span><span class="n">tier2_fs</span><span class="p">,</span> <span class="n">fontstyle</span><span class="o">=</span><span class="s2">&quot;italic&quot;</span><span class="p">,</span>
+                    <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;dimgray&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">context</span><span class="p">:</span>
+            <span class="n">fig</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                <span class="n">x_right</span><span class="p">,</span> <span class="n">y_mid</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span>
+                <span class="n">fontsize</span><span class="o">=</span><span class="n">tier3_fs</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;normal&quot;</span><span class="p">,</span>
+                <span class="n">ha</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">va</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;dimgray&quot;</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CanvasBuilder.single_canvas">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.CanvasBuilder.single_canvas">[docs]</a>
+    <span class="nd">@contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">single_canvas</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">figsize</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+        <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Figure</span><span class="p">,</span> <span class="n">Axes</span><span class="p">],</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield a single-panel figure with golden margins and mirror ticks.</span>
+
+<span class="sd">        :param figsize: Figure width and height in inches.</span>
+<span class="sd">        :param project: Tier-1 brand / project tag.</span>
+<span class="sd">        :param status: Tier-2 status label.</span>
+<span class="sd">        :param context: Tier-3 context string.</span>
+<span class="sd">        :yields: ``(Figure, Axes)`` ready for plot construction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_global_style</span><span class="p">()</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_margins</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_axis_styling</span><span class="p">(</span><span class="n">ax</span><span class="p">)</span>
+        <span class="c1"># Annotations must be added BEFORE yield so that fig.savefig() called</span>
+        <span class="c1"># inside the `with` block captures them.  The canvas.draw() inside</span>
+        <span class="c1"># add_three_tier_typography uses the renderer on the (already-margined)</span>
+        <span class="c1"># empty axes to measure Tier-1 text width — this is correct and safe.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_three_tier_typography</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">project</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CanvasBuilder.composite_canvas">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.CanvasBuilder.composite_canvas">[docs]</a>
+    <span class="nd">@contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">composite_canvas</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">figsize</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+        <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Figure</span><span class="p">,</span> <span class="n">Axes</span><span class="p">,</span> <span class="n">Axes</span><span class="p">],</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield a 7:3 two-panel composite figure with a shared X-axis.</span>
+
+<span class="sd">        The upper axes occupies 70 % of the plot area height; the lower</span>
+<span class="sd">        axes occupies the remaining 30 %.  The shared X-axis ensures</span>
+<span class="sd">        pixel-perfect horizontal alignment.  Upper panel X-tick labels</span>
+<span class="sd">        are hidden so the two panels appear visually fused.</span>
+
+<span class="sd">        :param figsize: Figure width and height in inches.</span>
+<span class="sd">        :param project: Tier-1 brand / project tag.</span>
+<span class="sd">        :param status: Tier-2 status label.</span>
+<span class="sd">        :param context: Tier-3 context string.</span>
+<span class="sd">        :yields: ``(Figure, ax_main, ax_ratio)`` ready for plot construction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_global_style</span><span class="p">()</span>
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="n">figsize</span><span class="p">)</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">gridspec</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span>
+            <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">height_ratios</span><span class="o">=</span><span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">hspace</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span>
+        <span class="p">)</span>
+        <span class="n">ax_main</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">ax_ratio</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">gs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sharex</span><span class="o">=</span><span class="n">ax_main</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_margins</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_axis_styling</span><span class="p">(</span><span class="n">ax_main</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_apply_axis_styling</span><span class="p">(</span><span class="n">ax_ratio</span><span class="p">)</span>
+
+        <span class="c1"># Fuse panels: hide upper X-tick labels, keep tick lines</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">labelbottom</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="c1"># Annotations before yield — same reason as single_canvas.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_three_tier_typography</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">project</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">fig</span><span class="p">,</span> <span class="n">ax_main</span><span class="p">,</span> <span class="n">ax_ratio</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="add_stats_legend">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.engine.add_stats_legend">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">add_stats_legend</span><span class="p">(</span><span class="n">ax</span><span class="p">:</span> <span class="n">Axes</span><span class="p">,</span> <span class="n">stats</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add a frameless stats legend box (N, μ, σ, Cpk) to the axes.</span>
+
+<span class="sd">    :param ax: The matplotlib Axes instance to annotate.</span>
+<span class="sd">    :type ax: matplotlib.axes.Axes</span>
+<span class="sd">    :param stats: Dictionary with keys ``n``, ``mean``, ``sigma``,</span>
+<span class="sd">        and optionally ``cpk``.</span>
+<span class="sd">    :type stats: dict[str, float]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">textstr</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span>
+        <span class="sa">f</span><span class="s2">&quot;$N$ = </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s2">&quot;$</span><span class="se">\\</span><span class="s2">mu$ = </span><span class="si">{</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;mean&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4g</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s2">&quot;$</span><span class="se">\\</span><span class="s2">sigma$ = </span><span class="si">{</span><span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sigma&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4g</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="p">])</span>
+    <span class="k">if</span> <span class="s2">&quot;cpk&quot;</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">:</span>
+        <span class="n">textstr</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">$C_</span><span class="se">{{</span><span class="s2">pk</span><span class="se">}}</span><span class="s2">$ = </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;cpk&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="n">props</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s2">&quot;round&quot;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s2">&quot;white&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+        <span class="mf">0.97</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">,</span> <span class="n">textstr</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span>
+        <span class="n">fontsize</span><span class="o">=</span><span class="n">FAB_STYLE_CONTEXT</span><span class="o">.</span><span class="n">base_font_size</span><span class="p">,</span>
+        <span class="n">verticalalignment</span><span class="o">=</span><span class="s2">&quot;top&quot;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="n">props</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">FabPlot-CLI</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/cli.html">CLI Entry Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/data.html">Data I/O</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/stats.html">Statistics &amp; Metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/render.html">Render Engine &amp; Plots</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fabplot.render.plots &#8212; FabPlot-CLI 0.1.0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for fabplot.render.plots</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Concrete plot builders for histogram, trend, and compare chart rendering.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">fabplot.render.engine</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CanvasBuilder</span><span class="p">,</span>
+    <span class="n">FAB_STYLE_CONTEXT</span><span class="p">,</span>
+    <span class="n">add_stats_legend</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fabplot.stats.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">calculate_metrics</span><span class="p">,</span>
+    <span class="n">calculate_ratio</span><span class="p">,</span>
+    <span class="n">calculate_smart_bins</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_builder</span> <span class="o">=</span> <span class="n">CanvasBuilder</span><span class="p">(</span><span class="n">FAB_STYLE_CONTEXT</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="render_hist1d">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.plots.render_hist1d">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">render_hist1d</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">column_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render and save a 1D histogram with smart binning and stats overlay.</span>
+
+<span class="sd">    When *data* is a list of arrays (and *column_name* a matching list of</span>
+<span class="sd">    strings), all series are plotted as overlaid, semi-transparent histograms</span>
+<span class="sd">    on a shared bin range using the Petroff palette.  The stats legend is</span>
+<span class="sd">    computed from the first series only.</span>
+
+<span class="sd">    :param data: One array **or** a list of arrays of metric values.</span>
+<span class="sd">    :type data: numpy.ndarray or list[numpy.ndarray]</span>
+<span class="sd">    :param column_name: Axis label — a single string or a list matching *data*.</span>
+<span class="sd">    :type column_name: str or list[str]</span>
+<span class="sd">    :param output_path: Destination file path (.pdf or .svg).</span>
+<span class="sd">    :type output_path: str or pathlib.Path</span>
+<span class="sd">    :param norm: If ``True``, normalise to Yield Density (PDF).</span>
+<span class="sd">    :type norm: bool</span>
+<span class="sd">    :param metadata: Deprecated key-value pairs (ignored; use ``context``).</span>
+<span class="sd">    :type metadata: dict[str, str] or None</span>
+<span class="sd">    :param project: Tier-1 brand / project tag (top-left, bold).</span>
+<span class="sd">    :type project: str or None</span>
+<span class="sd">    :param status: Tier-2 status label (italic, 77 % size).</span>
+<span class="sd">    :type status: str or None</span>
+<span class="sd">    :param context: Tier-3 context string (top-right, 60 % size).</span>
+<span class="sd">    :type context: str or None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Normalise to lists for uniform multi-series handling</span>
+    <span class="n">data_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">data</span><span class="p">]</span>
+    <span class="n">name_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">column_name</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">column_name</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="n">palette</span> <span class="o">=</span> <span class="n">FAB_STYLE_CONTEXT</span><span class="o">.</span><span class="n">petroff_palette</span>
+    <span class="n">valid_arrays</span> <span class="o">=</span> <span class="p">[</span><span class="n">arr</span><span class="p">[</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">arr</span><span class="p">)]</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">data_list</span><span class="p">]</span>
+    <span class="n">multi</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+
+    <span class="c1"># Compute bin edges: shared range for overlays, smart count from first series</span>
+    <span class="n">n_bins</span> <span class="o">=</span> <span class="n">calculate_smart_bins</span><span class="p">(</span><span class="n">valid_arrays</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">bin_edges</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">multi</span><span class="p">:</span>
+        <span class="n">g_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">valid_arrays</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">g_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">valid_arrays</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">bin_edges</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">g_min</span><span class="p">,</span> <span class="n">g_max</span><span class="p">,</span> <span class="n">n_bins</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">bin_edges</span> <span class="o">=</span> <span class="n">n_bins</span>
+
+    <span class="k">with</span> <span class="n">_builder</span><span class="o">.</span><span class="n">single_canvas</span><span class="p">(</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">ax</span><span class="p">):</span>
+        <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="k">if</span> <span class="n">multi</span> <span class="k">else</span> <span class="mf">0.7</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">valid</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">valid_arrays</span><span class="p">,</span> <span class="n">name_list</span><span class="p">)):</span>
+            <span class="n">color</span> <span class="o">=</span> <span class="n">palette</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">palette</span><span class="p">)]</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span>
+                <span class="n">valid</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="n">bin_edges</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span>
+                <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">,</span>
+                <span class="n">hatch</span><span class="o">=</span><span class="s2">&quot;///&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">name</span> <span class="k">if</span> <span class="n">multi</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span>
+                <span class="n">valid</span><span class="p">,</span> <span class="n">bins</span><span class="o">=</span><span class="n">bin_edges</span><span class="p">,</span> <span class="n">density</span><span class="o">=</span><span class="n">norm</span><span class="p">,</span>
+                <span class="n">histtype</span><span class="o">=</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">stats</span> <span class="o">=</span> <span class="n">calculate_metrics</span><span class="p">(</span><span class="n">valid_arrays</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">add_stats_legend</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">stats</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">multi</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">&quot;best&quot;</span><span class="p">)</span>
+
+        <span class="n">x_label</span> <span class="o">=</span> <span class="s2">&quot; / &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">name_list</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">x_label</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Yield Density (PDF)&quot;</span> <span class="k">if</span> <span class="n">norm</span> <span class="k">else</span> <span class="s2">&quot;Counts&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distribution Analysis: </span><span class="si">{</span><span class="n">x_label</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">_builder</span><span class="o">.</span><span class="n">autoadjust_xticklabels</span><span class="p">(</span><span class="n">ax</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="render_trend">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.plots.render_trend">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">render_trend</span><span class="p">(</span>
+    <span class="n">x_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">y_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">x_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">y_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render and save a trend chart with UCL/LCL control limits.</span>
+
+<span class="sd">    :param x_data: Array of time or lot-number values for the X-axis.</span>
+<span class="sd">    :type x_data: numpy.ndarray</span>
+<span class="sd">    :param y_data: Array of metric values for the Y-axis.</span>
+<span class="sd">    :type y_data: numpy.ndarray</span>
+<span class="sd">    :param x_name: Label for the X-axis.</span>
+<span class="sd">    :type x_name: str</span>
+<span class="sd">    :param y_name: Label for the Y-axis and plot title.</span>
+<span class="sd">    :type y_name: str</span>
+<span class="sd">    :param output_path: Destination file path (.pdf or .svg).</span>
+<span class="sd">    :type output_path: str or pathlib.Path</span>
+<span class="sd">    :param metadata: Deprecated key-value pairs (ignored; use ``context``).</span>
+<span class="sd">    :type metadata: dict[str, str] or None</span>
+<span class="sd">    :param project: Tier-1 brand / project tag (top-left, bold).</span>
+<span class="sd">    :type project: str or None</span>
+<span class="sd">    :param status: Tier-2 status label (italic, 77 % size).</span>
+<span class="sd">    :type status: str or None</span>
+<span class="sd">    :param context: Tier-3 context string (top-right, 60 % size).</span>
+<span class="sd">    :type context: str or None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">palette</span> <span class="o">=</span> <span class="n">FAB_STYLE_CONTEXT</span><span class="o">.</span><span class="n">petroff_palette</span>
+
+    <span class="k">with</span> <span class="n">_builder</span><span class="o">.</span><span class="n">single_canvas</span><span class="p">(</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">ax</span><span class="p">):</span>
+        <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span>
+        <span class="n">x_sorted</span> <span class="o">=</span> <span class="n">x_data</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+        <span class="n">y_sorted</span> <span class="o">=</span> <span class="n">y_data</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+            <span class="n">x_sorted</span><span class="p">,</span> <span class="n">y_sorted</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;-&quot;</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">stats</span> <span class="o">=</span> <span class="n">calculate_metrics</span><span class="p">(</span><span class="n">y_sorted</span><span class="p">)</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sigma&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">sigma</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ucl</span> <span class="o">=</span> <span class="n">mean</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">sigma</span>
+            <span class="n">lcl</span> <span class="o">=</span> <span class="n">mean</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">sigma</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Mean&quot;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axhspan</span><span class="p">(</span>
+                <span class="n">lcl</span><span class="p">,</span> <span class="n">ucl</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.15</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s2">&quot;$\pm 3\sigma$ (Control Limits)&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">&quot;lower right&quot;</span><span class="p">)</span>
+
+        <span class="n">add_stats_legend</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">stats</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">x_name</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">y_name</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trend Analysis: </span><span class="si">{</span><span class="n">y_name</span><span class="si">}</span><span class="s2"> over </span><span class="si">{</span><span class="n">x_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">_builder</span><span class="o">.</span><span class="n">autoadjust_xticklabels</span><span class="p">(</span><span class="n">ax</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="render_compare">
+<a class="viewcode-back" href="../../../api/render.html#fabplot.render.plots.render_compare">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">render_compare</span><span class="p">(</span>
+    <span class="n">x_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">y1_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">y2_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">x_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">y1_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">y2_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">ratio_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Ratio&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Render and save a 7:3 composite comparison chart.</span>
+
+<span class="sd">    The main (upper) panel shows both series.  The lower ratio panel</span>
+<span class="sd">    shows ``y1 / y2`` aligned to the same X-axis.</span>
+
+<span class="sd">    :param x_data: Shared X-axis values.</span>
+<span class="sd">    :type x_data: numpy.ndarray</span>
+<span class="sd">    :param y1_data: First data series (numerator of ratio).</span>
+<span class="sd">    :type y1_data: numpy.ndarray</span>
+<span class="sd">    :param y2_data: Second data series (denominator of ratio).</span>
+<span class="sd">    :type y2_data: numpy.ndarray</span>
+<span class="sd">    :param x_name: X-axis label.</span>
+<span class="sd">    :type x_name: str</span>
+<span class="sd">    :param y1_name: Legend label for the first series.</span>
+<span class="sd">    :type y1_name: str</span>
+<span class="sd">    :param y2_name: Legend label for the second series.</span>
+<span class="sd">    :type y2_name: str</span>
+<span class="sd">    :param output_path: Destination file path (.pdf or .svg).</span>
+<span class="sd">    :type output_path: str or pathlib.Path</span>
+<span class="sd">    :param ratio_label: Y-axis label for the lower ratio panel.</span>
+<span class="sd">    :type ratio_label: str</span>
+<span class="sd">    :param project: Tier-1 brand / project tag (top-left, bold).</span>
+<span class="sd">    :type project: str or None</span>
+<span class="sd">    :param status: Tier-2 status label (italic, 77 % size).</span>
+<span class="sd">    :type status: str or None</span>
+<span class="sd">    :param context: Tier-3 context string (top-right, 60 % size).</span>
+<span class="sd">    :type context: str or None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">palette</span> <span class="o">=</span> <span class="n">FAB_STYLE_CONTEXT</span><span class="o">.</span><span class="n">petroff_palette</span>
+    <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">x_data</span><span class="p">)</span>
+    <span class="n">x_s</span> <span class="o">=</span> <span class="n">x_data</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+    <span class="n">y1_s</span> <span class="o">=</span> <span class="n">y1_data</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+    <span class="n">y2_s</span> <span class="o">=</span> <span class="n">y2_data</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+    <span class="n">ratio</span> <span class="o">=</span> <span class="n">calculate_ratio</span><span class="p">(</span><span class="n">y1_s</span><span class="p">,</span> <span class="n">y2_s</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="n">_builder</span><span class="o">.</span><span class="n">composite_canvas</span><span class="p">(</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="n">status</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">ax_main</span><span class="p">,</span> <span class="n">ax_ratio</span><span class="p">):</span>
+        <span class="c1"># ── Upper panel: both data series ─────────────────────────────</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+            <span class="n">x_s</span><span class="p">,</span> <span class="n">y1_s</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;-&quot;</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">y1_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+            <span class="n">x_s</span><span class="p">,</span> <span class="n">y2_s</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;s&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">y2_name</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">&quot;best&quot;</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;Value&quot;</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Comparison: </span><span class="si">{</span><span class="n">y1_name</span><span class="si">}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">y2_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">add_stats_legend</span><span class="p">(</span><span class="n">ax_main</span><span class="p">,</span> <span class="n">calculate_metrics</span><span class="p">(</span><span class="n">y1_s</span><span class="p">))</span>
+
+        <span class="c1"># ── Lower panel: ratio ────────────────────────────────────────</span>
+        <span class="n">ax_ratio</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+            <span class="n">x_s</span><span class="p">,</span> <span class="n">ratio</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;-&quot;</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.85</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ax_ratio</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span>
+            <span class="mf">1.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">palette</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span>
+        <span class="p">)</span>
+        <span class="n">ax_ratio</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">x_name</span><span class="p">)</span>
+        <span class="n">ax_ratio</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ratio_label</span><span class="p">)</span>
+        <span class="n">ax_ratio</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">_builder</span><span class="o">.</span><span class="n">autoadjust_xticklabels</span><span class="p">(</span><span class="n">ax_ratio</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">FabPlot-CLI</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/cli.html">CLI Entry Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/data.html">Data I/O</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/stats.html">Statistics &amp; Metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/render.html">Render Engine &amp; Plots</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2026.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
