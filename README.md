@@ -23,7 +23,7 @@ A standardized Python Command-Line Interface (CLI) utility designed to generate 
 Clone the repository and install the package in development mode using `uv`:
 
 ```bash
-git clone <repository_url>
+git clone https://github.com/PenHsuanWang/scientific-plot-converter
 cd scientific-plot-converter
 uv venv
 source .venv/bin/activate

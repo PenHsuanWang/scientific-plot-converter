@@ -46,7 +46,7 @@ A standardized Python Command-Line Interface (CLI) utility designed to generate 
 Clone the repository and install the package in development mode using `uv`:
 
 ```bash
-git clone <repository_url>
+git clone https://github.com/PenHsuanWang/scientific-plot-converter 
 cd scientific-plot-converter
 uv venv
 source .venv/bin/activate
@@ -82,23 +82,189 @@ Plot a metric over time or lot number to identify process drifts or excursions.
 fabplot trend --input lot_summary.csv --x LotID --y CD_Value
 ```
 
+---
+
 ## Development
 
-The project structure is organized according to Domain-Driven Design (DDD) principles:
+### Project Structure
 
-- `src/fabplot/cli.py`: Typer application entry points and CLI command definitions.
-- `src/fabplot/data/io.py`: Polars wrappers for high-speed data ingestion and validation.
-- `src/fabplot/stats/metrics.py`: Core statistical calculations ($N$, $\mu$, $\sigma$, $C_{pk}$) and smart binning rules.
-- `src/fabplot/render/`: Matplotlib rendering engine and plot builders enforcing the strict "CERN Layout".
+```
+scientific-plot-converter/
+├── src/fabplot/
+│   ├── cli.py            # Typer entry points and CLI command definitions
+│   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
+│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk) and smart binning
+│   └── render/           # Matplotlib engine enforcing the "CERN Layout"
+├── tests/
+│   └── test_cli.py       # pytest test suite
+├── .pre-commit-config.yaml
+├── tox.ini
+├── pyproject.toml
+└── .github/workflows/ci.yml
+```
 
-### Running Tests & Linting
+---
 
-Ensure code quality and reliability by running the test suite and linter:
+### Step 1 — One-Time Local Setup
+
+After cloning and installing dependencies (see [Installation](#installation)), register the pre-commit hooks into your local git repository:
 
 ```bash
-# Run the Ruff linter
-uv run ruff check .
+pre-commit install
+```
 
-# Run the Pytest suite
-uv run pytest
+This installs a `.git/hooks/pre-commit` script that automatically runs all quality checks every time you run `git commit`.
+
+> **Note:** The `mypy` hook uses `language: system`, meaning it resolves imports from your active virtual environment. Always activate `.venv` before committing.
+
+---
+
+### Step 2 — Write Code
+
+The codebase enforces two style standards:
+
+| Standard | Scope | Tool |
+|---|---|---|
+| [PEP 8](https://peps.python.org/pep-0008/) | Formatting, naming, line length (≤88 chars) | `ruff`, `flake8` |
+| [PEP 287](https://peps.python.org/pep-0287/) | reStructuredText docstrings | `flake8-docstrings` |
+
+Every public function and class must carry a reST docstring:
+
+```python
+def compute_stats(data: pl.Series) -> dict[str, float]:
+    """Compute descriptive statistics for a data series.
+
+    :param data: A Polars Series of numeric measurements.
+    :type data: pl.Series
+    :returns: Mapping of statistic name to value (n, mean, std, cpk).
+    :rtype: dict[str, float]
+    :raises ValueError: If the series is empty.
+    """
+```
+
+---
+
+### Step 3 — Commit (pre-commit hooks fire automatically)
+
+When you run `git commit`, the following hooks execute in order:
+
+```
+git commit -m "feat: add new plot type"
+```
+
+| Hook | What it checks / fixes |
+|---|---|
+| `trailing-whitespace` | Strips trailing spaces from all files |
+| `end-of-file-fixer` | Ensures every file ends with a single newline |
+| `check-yaml` | Validates YAML syntax |
+| `check-added-large-files` | Rejects files > 500 KB |
+| `ruff --fix` | Fast PEP 8 lint; auto-fixes safe issues |
+| `flake8` | PEP 8 style + PEP 287 docstring enforcement on `src/` and `tests/` |
+| `mypy src/` | Strict static type checking across the entire package |
+
+If any hook reports an error, the commit is **blocked**. Fix the reported issues and re-stage your files:
+
+```bash
+git add -u
+git commit -m "feat: add new plot type"   # hooks re-run
+```
+
+---
+
+### Step 4 — Run the Full Check Suite Locally with `tox`
+
+Before pushing, reproduce the exact CI environment locally using `tox`. This catches any issues that only appear in an isolated, freshly built package:
+
+```bash
+# Run both environments (lint + test)
+tox
+
+# Or target a single environment
+tox -e lint    # ruff + flake8 + mypy
+tox -e test    # pytest --cov=fabplot
+```
+
+`tox` builds a source distribution from `pyproject.toml`, installs it into an isolated virtualenv, then runs the commands — mirroring exactly what GitHub Actions does.
+
+Expected output on a clean codebase:
+
+```
+lint: OK ✔
+test: OK ✔
+  congratulations :)
+```
+
+---
+
+### Step 5 — Push and CI
+
+Once your commit is pushed to GitHub, the CI pipeline (`.github/workflows/ci.yml`) triggers automatically on every push and pull request to `main`.
+
+#### CI Jobs
+
+```
+push / pull_request
+        │
+        ├─── Job: pre-commit
+        │         ├── Install project deps (needed by mypy system hook)
+        │         ├── Install pre-commit
+        │         └── pre-commit run --all-files
+        │
+        └─── Job: tox (matrix)
+                  ├── tox -e lint   →  ruff + flake8 + mypy
+                  └── tox -e test   →  pytest --cov=fabplot
+```
+
+The two tox matrix jobs run in parallel. All three jobs must pass before a pull request can be merged.
+
+---
+
+### Running Individual Tools Manually
+
+```bash
+# Ruff (fast lint)
+ruff check src tests
+
+# Flake8 (PEP 8 + PEP 287 docstrings)
+flake8 src tests
+
+# mypy (strict types)
+mypy src
+
+# pytest with coverage
+pytest --cov=fabplot --cov-report=term-missing
+
+# Run all pre-commit hooks without committing
+pre-commit run --all-files
+```
+
+---
+
+### Complete Developer Workflow at a Glance
+
+```
+1. git clone + uv pip install -e ".[dev]"   # one-time setup
+2. pre-commit install                         # one-time: register git hooks
+        ↓
+3. Edit source code in src/fabplot/
+        ↓
+4. git add <files>
+        ↓
+5. git commit -m "..."
+   └── pre-commit hooks run automatically
+       trailing-whitespace ✔  end-of-file-fixer ✔  check-yaml ✔
+       ruff --fix ✔  flake8 ✔  mypy ✔
+       → blocked if any check fails; fix and re-stage
+        ↓
+6. tox                  # optional but recommended before push
+   └── lint ✔  test ✔
+        ↓
+7. git push origin <branch>
+        ↓
+8. GitHub Actions CI
+   ├── pre-commit (all hooks)  ✔
+   ├── tox -e lint             ✔
+   └── tox -e test             ✔
+        ↓
+9. Open / merge Pull Request
 ```

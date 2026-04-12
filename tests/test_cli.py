@@ -53,6 +53,18 @@ def test_trend_command(sample_csv, tmp_path):
     assert out_file.exists()
 
 
+def test_hist1d_default_output(sample_csv, tmp_path, monkeypatch):
+    """Verify default output lands in figure_out/ under the working directory."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["hist1d", "--input", str(sample_csv), "--x", "CD_Value"],
+    )
+    assert result.exit_code == 0
+    expected = tmp_path / "figure_out" / "sample_data_hist1d.pdf"
+    assert expected.exists()
+
+
 def test_invalid_column_hist1d(sample_csv):
     result = runner.invoke(
         app, ["hist1d", "--input", str(sample_csv), "--x", "MissingCol"]

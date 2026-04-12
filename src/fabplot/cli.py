@@ -43,7 +43,7 @@ def hist1d(
         None,
         "--output",
         "-o",
-        help="Output path (.pdf or .svg). Defaults to <input>_hist1d.pdf.",
+        help="Output path (.pdf or .svg). Defaults to figure_out/<input>_hist1d.pdf.",
     ),
 ) -> None:
     """Generate a 1D histogram with smart binning and Cpk overlay."""
@@ -60,8 +60,9 @@ def hist1d(
         out_path = (
             Path(output)
             if output
-            else Path(input).with_name(Path(input).stem + "_hist1d.pdf")
+            else Path.cwd() / "figure_out" / (Path(input).stem + "_hist1d.pdf")
         )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         metadata = {"File": Path(input).name, "N_Records": str(len(df))}
 
         render_hist1d(
@@ -104,7 +105,7 @@ def trend(
         None,
         "--output",
         "-o",
-        help="Output path (.pdf or .svg). Defaults to <input>_trend.pdf.",
+        help="Output path (.pdf or .svg). Defaults to figure_out/<input>_trend.pdf.",
     ),
 ) -> None:
     """Generate a Time-Series or Lot-Series trend chart with Control Limits."""
@@ -123,8 +124,9 @@ def trend(
         out_path = (
             Path(output)
             if output
-            else Path(input).with_name(Path(input).stem + "_trend.pdf")
+            else Path.cwd() / "figure_out" / (Path(input).stem + "_trend.pdf")
         )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         metadata = {"File": Path(input).name, "N_Records": str(len(df))}
 
         render_trend(
