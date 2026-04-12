@@ -68,16 +68,22 @@ fabplot trend --input lot_summary.csv --x LotID --y CD_Value
 ```
 scientific-plot-converter/
 ├── src/fabplot/
+│   ├── __init__.py       # package version (__version__)
 │   ├── cli.py            # Typer entry points and CLI command definitions
 │   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
 │   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk) and smart binning
 │   └── render/           # Matplotlib engine enforcing the "CERN Layout"
 ├── tests/
 │   └── test_cli.py       # pytest test suite
+├── figure_out/           # ← auto-created at runtime; in .gitignore
 ├── .pre-commit-config.yaml
+├── .gitignore
 ├── tox.ini
-├── pyproject.toml
-└── .github/workflows/ci.yml
+├── pyproject.toml        # version source of truth + [tool.bumpversion] config
+└── .github/
+    └── workflows/
+        ├── ci.yml        # runs on push/PR to main
+        └── release.yml   # runs on v* tags → GitHub Release
 ```
 
 ---
@@ -245,3 +251,89 @@ pre-commit run --all-files
         ↓
 9. Open / merge Pull Request
 ```
+---
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`) and uses
+[bump-my-version](https://github.com/callowayproject/bump-my-version) to keep the version string
+consistent across all files and to create annotated git tags automatically.
+
+### Version sources (kept in sync automatically)
+
+| File | Field |
+|---|---|
+| `pyproject.toml` | `version = "..."` under `[project]` and `current_version` under `[tool.bumpversion]` |
+| `src/fabplot/__init__.py` | `__version__ = "..."` |
+
+**Never edit these manually.** Always use the `bump-my-version` commands below.
+
+### How to cut a release
+
+**Step 1 — Decide the bump type**
+
+| Change type | Command | Example |
+|---|---|---|
+| Bug fix / patch | `bump-my-version bump patch` | `0.1.0` to `0.1.1` |
+| New feature, backward-compatible | `bump-my-version bump minor` | `0.1.0` to `0.2.0` |
+| Breaking change | `bump-my-version bump major` | `0.1.0` to `1.0.0` |
+
+**Step 2 - Run the bump command** (working tree must be clean)
+
+```bash
+# Activate your virtual environment first
+source .venv/bin/activate
+
+# Example: patch release
+bump-my-version bump patch
+```
+
+This will:
+
+1. Update `version` in `pyproject.toml` and `__version__` in `src/fabplot/__init__.py`
+2. Create a git commit: `Bump version: 0.1.0 to 0.1.1`
+3. Create an annotated git tag: `v0.1.1`
+
+The commit skips pre-commit hooks (`commit_args = "--no-verify"`) because the version bump
+itself is always valid.
+
+**Step 3 - Push the commit and tag together**
+
+```bash
+git push --follow-tags
+```
+
+`--follow-tags` pushes both the commit and the annotated tag in one command.
+
+### What happens on GitHub after the tag is pushed
+
+The tag push triggers `.github/workflows/release.yml`:
+
+```
+tag push v*.*.*
+        |
+        +-- Job: ci          (lint + test must pass)
+        |         +-- tox -e lint   ->  ruff + flake8 + mypy
+        |         +-- tox -e test   ->  pytest --cov=fabplot
+        |
+        +-- Job: build       (needs: ci)
+        |         +-- python -m build  ->  dist/ sdist + wheel
+        |         +-- upload dist/ as artifact
+        |
+        +-- Job: release     (needs: build)
+                  +-- gh release create v*.*.*
+                      +-- title: "Release v*.*.*"
+                      +-- release notes: auto-generated from commits
+                      +-- assets: sdist (.tar.gz) + wheel (.whl)
+```
+
+The release is visible at **GitHub > Releases**. No manual upload steps are needed.
+
+### Preview a bump without changing anything
+
+```bash
+bump-my-version bump patch --dry-run --verbose
+```
+
+This shows exactly which lines in which files would change, what commit message and tag would be
+created - without writing anything to disk.
