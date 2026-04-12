@@ -1,7 +1,7 @@
 Data I/O
 ========
 
-.. automodule:: fabplot.data.io
+.. automodule:: dsprinter.data.io
    :members:
    :undoc-members:
    :show-inheritance:

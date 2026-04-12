@@ -3,9 +3,9 @@ import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from fabplot.cli import app
-from fabplot.render.engine import FAB_STYLE_CONTEXT, FabStyleContext
-from fabplot.stats.metrics import calculate_ratio
+from dsprinter.cli import app
+from dsprinter.render.engine import DSP_STYLE_CONTEXT, DSPStyleContext
+from dsprinter.stats.metrics import calculate_ratio
 
 
 runner = CliRunner()
@@ -113,8 +113,8 @@ def test_annotations_present_in_figure_before_savefig():
     the context-manager finally block — after fig.savefig() — so annotations
     never appeared in saved output files.
     """
-    from fabplot.render.engine import CanvasBuilder, FAB_STYLE_CONTEXT
-    builder = CanvasBuilder(FAB_STYLE_CONTEXT)
+    from dsprinter.render.engine import CanvasBuilder, DSP_STYLE_CONTEXT
+    builder = CanvasBuilder(DSP_STYLE_CONTEXT)
     with builder.single_canvas(
         project="TestProject",
         status="Draft",
@@ -173,24 +173,24 @@ def test_trend_three_tier_flags(sample_csv, tmp_path):
     assert out_file.exists()
 
 
-# ── FabStyleContext integrity ─────────────────────────────────────────────────
+# ── DSPStyleContext integrity ─────────────────────────────────────────────────
 
 def test_fab_style_context_is_frozen():
-    """Verify FabStyleContext is immutable at runtime."""
+    """Verify DSPStyleContext is immutable at runtime."""
     with pytest.raises((AttributeError, TypeError)):
-        FAB_STYLE_CONTEXT.margin_left = 0.99  # type: ignore[misc]
+        DSP_STYLE_CONTEXT.margin_left = 0.99  # type: ignore[misc]
 
 
 def test_fab_style_context_tier_ratios():
     """Tier size ratios must satisfy the spec: 0.75–0.80 and 0.60."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert 0.75 <= ctx.tier2_size_ratio <= 0.80
     assert ctx.tier3_size_ratio == pytest.approx(0.60, abs=0.01)
 
 
 def test_fab_style_context_golden_margins():
     """Golden margins must match specification exactly."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert ctx.margin_left == pytest.approx(0.15)
     assert ctx.margin_right == pytest.approx(0.05)
     assert 0.08 <= ctx.margin_top <= 0.10
@@ -199,7 +199,7 @@ def test_fab_style_context_golden_margins():
 
 def test_petroff_palette_no_pure_red_green_adjacent():
     """First two Petroff colors must not be a pure red vs. pure green pair."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     c1, c2 = ctx.petroff_palette[0], ctx.petroff_palette[1]
     # A pure red would have R≫G,B; a pure green would have G≫R,B.
     # We verify neither of the first two slots is pure red (#ff0000) or
@@ -313,7 +313,7 @@ def test_compare_missing_column(sample_csv, tmp_path):
 
 def test_resolve_output_none_returns_figure_out_default(tmp_path, monkeypatch):
     """None output → figure_out/<stem>_<suffix>.pdf under CWD."""
-    from fabplot.cli import _resolve_output
+    from dsprinter.cli import _resolve_output
     monkeypatch.chdir(tmp_path)
     result = _resolve_output(None, "mydata", "hist1d")
     assert result == tmp_path / "figure_out" / "mydata_hist1d.pdf"
@@ -321,7 +321,7 @@ def test_resolve_output_none_returns_figure_out_default(tmp_path, monkeypatch):
 
 def test_resolve_output_bare_filename_routes_to_figure_out(tmp_path, monkeypatch):
     """A bare filename (no directory component) must land in figure_out/."""
-    from fabplot.cli import _resolve_output
+    from dsprinter.cli import _resolve_output
     monkeypatch.chdir(tmp_path)
     result = _resolve_output("report.pdf", "data", "trend")
     assert result == tmp_path / "figure_out" / "report.pdf"
@@ -329,7 +329,7 @@ def test_resolve_output_bare_filename_routes_to_figure_out(tmp_path, monkeypatch
 
 def test_resolve_output_bare_svg_routes_to_figure_out(tmp_path, monkeypatch):
     """Bare filename with .svg extension must also route to figure_out/."""
-    from fabplot.cli import _resolve_output
+    from dsprinter.cli import _resolve_output
     monkeypatch.chdir(tmp_path)
     result = _resolve_output("chart.svg", "data", "hist1d")
     assert result == tmp_path / "figure_out" / "chart.svg"
@@ -337,7 +337,7 @@ def test_resolve_output_bare_svg_routes_to_figure_out(tmp_path, monkeypatch):
 
 def test_resolve_output_explicit_subdir_used_as_is(tmp_path):
     """A path with an explicit subdirectory component must be used verbatim."""
-    from fabplot.cli import _resolve_output
+    from dsprinter.cli import _resolve_output
     explicit = str(tmp_path / "mydir" / "out.pdf")
     result = _resolve_output(explicit, "data", "hist1d")
     assert result == (tmp_path / "mydir" / "out.pdf")
@@ -345,7 +345,7 @@ def test_resolve_output_explicit_subdir_used_as_is(tmp_path):
 
 def test_resolve_output_absolute_path_used_as_is(tmp_path):
     """An absolute path must be returned as-is without routing to figure_out/."""
-    from fabplot.cli import _resolve_output
+    from dsprinter.cli import _resolve_output
     abs_path = str(tmp_path / "absolute.pdf")
     result = _resolve_output(abs_path, "data", "hist1d")
     assert result == tmp_path / "absolute.pdf"

@@ -1,9 +1,9 @@
 """Matplotlib rendering engine enforcing the scientific layout standard.
 
-Implements the ``FabStyleContext`` value object and ``CanvasBuilder`` class
+Implements the ``DSPStyleContext`` value object and ``CanvasBuilder`` class
 that together enforce the three-tier typography hierarchy, golden margin
 layout, four-sided mirror ticks, and the Petroff-compliant color palette
-across all FabPlot output.
+across all DSPrinter output.
 """
 
 from contextlib import contextmanager
@@ -19,8 +19,8 @@ from matplotlib.figure import Figure
 
 
 @dataclass(frozen=True)
-class FabStyleContext:
-    """Immutable value object holding all FabPlot styling constants.
+class DSPStyleContext:
+    """Immutable value object holding all DSPrinter styling constants.
 
     All fields are frozen at class definition. Changing any constant
     requires a versioned library release — runtime mutation is prohibited
@@ -79,11 +79,11 @@ class FabStyleContext:
 
 
 #: Module-level singleton — the one authoritative style instance.
-FAB_STYLE_CONTEXT: Final[FabStyleContext] = FabStyleContext()
+DSP_STYLE_CONTEXT: Final[DSPStyleContext] = DSPStyleContext()
 
 
 class CanvasBuilder:
-    """Applies ``FabStyleContext`` rules to Matplotlib figures.
+    """Applies ``DSPStyleContext`` rules to Matplotlib figures.
 
     Responsible for:
 
@@ -96,7 +96,7 @@ class CanvasBuilder:
       figure layouts.
     """
 
-    def __init__(self, style: FabStyleContext = FAB_STYLE_CONTEXT) -> None:
+    def __init__(self, style: DSPStyleContext = DSP_STYLE_CONTEXT) -> None:
         """Initialise the builder with the given style context."""
         self._style = style
 
@@ -342,6 +342,6 @@ def add_stats_legend(ax: Axes, stats: dict[str, float]) -> None:
     props = dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="gray")
     ax.text(
         0.97, 0.97, textstr, transform=ax.transAxes,
-        fontsize=FAB_STYLE_CONTEXT.base_font_size,
+        fontsize=DSP_STYLE_CONTEXT.base_font_size,
         verticalalignment="top", horizontalalignment="right", bbox=props,
     )

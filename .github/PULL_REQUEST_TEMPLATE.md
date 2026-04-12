@@ -32,8 +32,8 @@ Closes #<!-- issue number -->
 ## What Changed
 
 <!-- Bullet list of the key files and what was changed in each -->
-- `src/fabplot/render/engine.py` —
-- `src/fabplot/render/plots.py` —
+- `src/dsprinter/render/engine.py` —
+- `src/dsprinter/render/plots.py` —
 - `tests/` —
 
 ---
@@ -43,13 +43,13 @@ Closes #<!-- issue number -->
 - [ ] `tox` passes locally (all lint + test jobs green)
 - [ ] New unit tests added for every new behaviour / bug fix
 - [ ] No regression in existing 109 tests
-- [ ] `fabplot hist1d --help` and `fabplot trend --help` still produce correct output
+- [ ] `dp hist1d --help` and `dp trend --help` still produce correct output
 
 ---
 
 ## Visual Output Checklist _(for plot/engine changes only)_
 
-- [ ] Sample PDF regenerated: `fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD --project "Test" --status "Draft" --context "N=200" --output figure_out/check.pdf`
+- [ ] Sample PDF regenerated: `dp hist1d --input demo_histogram_data.csv --x Tool_A_CD --project "Test" --status "Draft" --context "N=200" --output figure_out/check.pdf`
 - [ ] Three-tier typography (Tier-1 bold top-left, Tier-2 italic, Tier-3 right) visible and legible
 - [ ] Font sizes match US-2.6 table (axis title 12 pt, tick labels 10 pt, Tier-1 14 pt)
 - [ ] Tick labels do not overlap; auto-rotation fires correctly for long labels
@@ -61,7 +61,7 @@ Closes #<!-- issue number -->
 ## Documentation Checklist
 
 - [ ] Public function / class docstrings updated for changed APIs
-- [ ] `FabPlot_CLI_SRS.md` updated if acceptance criteria changed
+- [ ] `DSPrinter_SRS.md` updated if acceptance criteria changed
 - [ ] `README.md` updated if CLI flags or output format changed
 - [ ] Sphinx docs build cleanly: `sphinx-build -b html docs docs/_build/html`
 

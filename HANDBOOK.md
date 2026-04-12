@@ -1,6 +1,6 @@
-# FabPlot-CLI — Developer Handbook
+# dsprinter — Developer Handbook
 
-> **Scope:** This handbook records the proven development SOP for `FabPlot-CLI`.
+> **Scope:** This handbook records the proven development SOP for `dsprinter`.
 > It covers git flow, feature development order, testing protocol, documentation
 > build, and version/release tagging. Follow these steps for every new feature.
 
@@ -78,12 +78,12 @@ Every feature **must** follow this order. Do not skip or reorder steps.
 
 Invoke the `requirements-analysis` skill, or manually:
 
-1. Update `FabPlot_CLI_SRS.md`:
+1. Update `DSPrinter_SRS.md`:
    - Add User Stories under the relevant EPIC (or create a new EPIC)
    - Write BDD acceptance criteria (Given / When / Then) for each story
    - Update NFRs if the feature has performance or style constraints
 
-2. Update `FabPlot_CLI_SDD.md`:
+2. Update `DSPrinter_SDD.md`:
    - Map new entities/value objects into the DDD model
    - Add new components/classes to the component table
    - Record design decisions (especially any alternatives considered)
@@ -98,10 +98,10 @@ engine.py  →  metrics.py  →  plots.py  →  cli.py  →  test_cli.py
 
 | File | What changes |
 |------|-------------|
-| `src/fabplot/render/engine.py` | `FabStyleContext` constants, `CanvasBuilder` helpers |
-| `src/fabplot/stats/metrics.py` | Pure computation functions (no I/O, no matplotlib) |
-| `src/fabplot/render/plots.py` | `render_*` functions using `CanvasBuilder` |
-| `src/fabplot/cli.py` | Typer command + options; calls render functions |
+| `src/dsprinter/render/engine.py` | `DSPStyleContext` constants, `CanvasBuilder` helpers |
+| `src/dsprinter/stats/metrics.py` | Pure computation functions (no I/O, no matplotlib) |
+| `src/dsprinter/render/plots.py` | `render_*` functions using `CanvasBuilder` |
+| `src/dsprinter/cli.py` | Typer command + options; calls render functions |
 | `tests/test_cli.py` | New test classes covering all new paths |
 
 ### Step 3 — Testing Protocol
@@ -110,13 +110,13 @@ Run tests after every file you touch:
 
 ```bash
 pytest tests/ -q                              # quick smoke check
-pytest tests/ -q --cov=fabplot --cov-report=term-missing   # with coverage
+pytest tests/ -q --cov=dsprinter --cov-report=term-missing   # with coverage
 ```
 
 Rules:
 - Every new public function needs at least one test.
 - Every CLI command needs: happy-path test, missing-column test, bad-input test.
-- `FabStyleContext` must remain immutable — keep the `test_fab_style_context_is_frozen` test.
+- `DSPStyleContext` must remain immutable — keep the `test_fab_style_context_is_frozen` test.
 - Target: 0 failed tests, coverage ≥ 80% on new code.
 
 ### Step 4 — Linting & Type Checking
@@ -127,7 +127,7 @@ tox
 
 # Or individually:
 tox -e lint    # ruff + flake8 + mypy
-tox -e test    # pytest --cov=fabplot
+tox -e test    # pytest --cov=dsprinter
 ```
 
 Common issues to fix before committing:
@@ -199,7 +199,7 @@ push / pull_request to dev or master
          │         ├── Job: pre-commit   → pre-commit run --all-files
          │         └── Job: tox (matrix, runs in parallel)
          │                   ├── tox -e lint   →  ruff + flake8 + mypy
-         │                   └── tox -e test   →  pytest --cov=fabplot
+         │                   └── tox -e test   →  pytest --cov=dsprinter
          │
          └─── Workflow: Docs (docs.yml)
                    ├── Job: build   → sphinx-build (runs on all PR/push triggers)
@@ -261,7 +261,7 @@ source .venv/bin/activate
 bump-my-version bump minor --dry-run --verbose   # preview first
 bump-my-version bump minor
 # → updates pyproject.toml  version = "0.2.0"
-# → updates src/fabplot/__init__.py  __version__ = "0.2.0"
+# → updates src/dsprinter/__init__.py  __version__ = "0.2.0"
 # → creates commit: "Bump version: 0.1.0 → 0.2.0"
 # → creates LOCAL annotated tag: v0.2.0
 
@@ -351,7 +351,7 @@ BOTTOM = 0.12   # room for X-axis title
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Style storage | `FabStyleContext` frozen dataclass | Immutability prevents accidental runtime mutations; singleton `FAB_STYLE_CONTEXT` ensures consistency |
+| Style storage | `DSPStyleContext` frozen dataclass | Immutability prevents accidental runtime mutations; singleton `DSP_STYLE_CONTEXT` ensures consistency |
 | Three-tier positioning | `fig.canvas.draw()` + `get_window_extent()` | Pixel-accurate Tier-2 placement next to Tier-1 without character-width heuristics |
 | Composite chart | `GridSpec(height_ratios=[7,3], hspace=0)` | `hspace=0` fuses panels visually; `labelbottom=False` hides upper X tick labels while keeping lines |
 | `savefig` | No `bbox_inches="tight"` | `tight` overrides the carefully set `subplots_adjust` margins |
@@ -388,7 +388,7 @@ The `deploy` job rebuilds from source on every `master` push.
    ```rst
    My Module
    =========
-   .. automodule:: fabplot.<module_name>
+   .. automodule:: dsprinter.<module_name>
       :members:
       :show-inheritance:
    ```
@@ -401,7 +401,7 @@ The `deploy` job rebuilds from source on every `master` push.
 
 | Checkpoint | What was accomplished |
 |---|---|
-| `001-visualization-layout-standard.md` | Full implementation of the Advanced Data Visualization Layout Standard: `FabStyleContext`, `CanvasBuilder`, `render_compare`, three-tier CLI flags, 17 tests, updated SRS/SDD, README, and Sphinx docs |
+| `001-visualization-layout-standard.md` | Full implementation of the Advanced Data Visualization Layout Standard: `DSPStyleContext`, `CanvasBuilder`, `render_compare`, three-tier CLI flags, 17 tests, updated SRS/SDD, README, and Sphinx docs |
 | `002-bug-fixes-docs-and-97-test-suite.md` | Bug fixes (output path, three-tier annotation), unit test expansion to 97 tests, README quick-start with `demo_histogram_data.csv`, `.gitignore` patterns for `.coverage`/`__pycache__` |
 | `003-multi-column-hist-gh-pages-font-fixes.md` | Multi-column histogram (`--x` repeated flag), gh-pages deploy workflow, font size fixes, `docs/_build/` removed from git tracking |
 | `004-ci-fixes-typography-spec-pr-setup.md` | Ticklabel auto-rotation (US-2.4), quantitative typography spec US-2.6, `axes.labelsize` 10pt→12pt bug fix, CI branch targets fixed (`main`→`dev`/`master`), PR template, pre-commit Python version fix |

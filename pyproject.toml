@@ -1,7 +1,7 @@
 [project]
-name = "fabplot-cli"
+name = "dsprinter"
 version = "0.2.0"
-description = "A standardized Python CLI utility to generate publication-quality, 'Scientific-Grade' visualizations from Fab CSV data."
+description = "A standardized Python CLI utility to generate publication-quality, 'Scientific-Grade' visualizations for data scientists."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fabplot = "fabplot.cli:app"
+dp = "dsprinter.cli:app"
 
 [project.optional-dependencies]
 dev = [
@@ -71,6 +71,6 @@ search = "version = \"{current_version}\""
 replace = "version = \"{new_version}\""
 
 [[tool.bumpversion.files]]
-filename = "src/fabplot/__init__.py"
+filename = "src/dsprinter/__init__.py"
 search = "__version__ = \"{current_version}\""
 replace = "__version__ = \"{new_version}\""

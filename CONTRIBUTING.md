@@ -1,4 +1,4 @@
-# Contributing to FabPlot-CLI
+# Contributing to dsprinter
 
 This document describes the Git workflow, branch strategy, pre-commit quality
 gates, and CI/CD pipeline used by this project.
@@ -274,7 +274,7 @@ mypy src                      # strict static type checking
 **`tox -e test`**
 
 ```bash
-pytest tests/ --cov=fabplot --cov-report=term-missing
+pytest tests/ --cov=dsprinter --cov-report=term-missing
 ```
 
 ### Pass / Fail Semantics
@@ -331,7 +331,7 @@ bump-my-version bump minor --dry-run --verbose
 bump-my-version bump minor
 #   Automatically:
 #     • Updates version = "..." in pyproject.toml
-#     • Updates __version__ = "..." in src/fabplot/__init__.py
+#     • Updates __version__ = "..." in src/dsprinter/__init__.py
 #     • Creates commit "Bump version: 0.1.0 → 0.2.0"
 #     • Creates LOCAL annotated tag v0.2.0
 
@@ -351,7 +351,7 @@ git push origin v0.2.0
 ```
 
 > **Never edit version strings manually.**  Only `bump-my-version` keeps
-> `pyproject.toml` and `src/fabplot/__init__.py` in sync and creates the
+> `pyproject.toml` and `src/dsprinter/__init__.py` in sync and creates the
 > required annotated tag.
 
 ### Recovery: Accidentally Bumped on `master`
@@ -377,8 +377,8 @@ git push origin v0.2.0
         │                                                                       │
         ├─── Job: build  (needs: ci) ──────────────────────────────────────────┤
         │         python -m build                                               │
-        │         produces dist/fabplot_cli-0.2.0.tar.gz                       │
-        │                  dist/fabplot_cli-0.2.0-py3-none-any.whl             │
+        │         produces dist/dsprinter-0.2.0.tar.gz                       │
+        │                  dist/dsprinter-0.2.0-py3-none-any.whl             │
         │         uploads both as GitHub Actions artifact "dist"               │
         │                                                                       │
         └─── Job: release  (needs: build) ────────────────────────────────────┘
@@ -437,5 +437,5 @@ Hotfix branches are deleted after the PR merges, just like feature branches.
 
 ---
 
-*This document is owned by the FabPlot-CLI maintainers and should be updated
+*This document is owned by the dsprinter maintainers and should be updated
 whenever the CI configuration or branching conventions change.*

@@ -1,4 +1,4 @@
-"""Generate demo CSV data for FabPlot-CLI examples."""
+"""Generate demo CSV data for dsprinter examples."""
 import numpy as np
 import polars as pl
 

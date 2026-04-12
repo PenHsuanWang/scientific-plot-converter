@@ -1,7 +1,7 @@
-# Software Requirements Specification (SRS): FabPlot-CLI
+# Software Requirements Specification (SRS): dsprinter
 
 ## 1. Product Overview
-- **Product Name:** FabPlot-CLI
+- **Product Name:** dsprinter
 - **Business Goal:** To provide a standardized Python CLI utility that generates publication-quality, "Scientific-Grade" visualizations from Fab CSV data, enforcing a uniform corporate/research style for internal reports and external whitepapers. This moves the organization from standard BI charts to statistically sound "visual metrology."
 - **Target Audience:** Data Science Researchers, Yield Enhancement Engineers, Product Managers, and Process Integration Engineers in semiconductor manufacturing.
 
@@ -99,7 +99,7 @@
 - **Business Rules:** Mirror tick application is automatic and zero-config. Top/right ticks display tick lines only, with no duplicate numeric labels. X-axis tick labels are auto-rotated to `tick_label_max_rotation` (45°) when bounding-box overlap is detected or when any label exceeds `tick_label_rotation_threshold` (6 characters); this is zero-config and cannot be disabled by the user.
 
 #### USER STORY-2.5: Petroff-Compliant Color Palette
-- **User Story:** As a Data Science Researcher, I want FabPlot to use a Petroff-principles color palette so that all plots remain legible in both color and grayscale print, and are accessible to colorblind readers.
+- **User Story:** As a Data Science Researcher, I want DSPrinter to use a Petroff-principles color palette so that all plots remain legible in both color and grayscale print, and are accessible to colorblind readers.
 - **Acceptance Criteria (BDD Format):**
   - **Scenario 1:** Default palette applied to all series
     - **Given** a plot with multiple data series or categories
@@ -116,7 +116,7 @@
 - **Business Rules:** The Petroff palette is the sole default palette and cannot be substituted via CLI flags. Software-default high-saturation palettes (e.g., Matplotlib tab10) are strictly prohibited.
 
 #### USER STORY-2.6: Axis Typography Quantification (CMS / HEP Reference)
-- **User Story:** As a Data Science Researcher, I want all axis titles, tick labels, and legends to follow a precise, documented size hierarchy derived from HEP/CMS publication standards so that FabPlot output matches the visual authority of CERN-style figures.
+- **User Story:** As a Data Science Researcher, I want all axis titles, tick labels, and legends to follow a precise, documented size hierarchy derived from HEP/CMS publication standards so that DSPrinter output matches the visual authority of CERN-style figures.
 - **Acceptance Criteria (BDD Format):**
   - **Scenario 1:** Axis title is visually larger than tick labels
     - **Given** any plot is generated
@@ -129,10 +129,10 @@
   - **Scenario 3:** Composite chart panels render at identical absolute font sizes
     - **Given** a 7:3 composite (compare) chart is generated
     - **When** the upper main panel and lower ratio panel are both inspected
-    - **Then** axis titles and tick labels in both panels are rendered at identical absolute point sizes. (Unlike ROOT/CMS where relative-to-pad-height sizing requires a `1 / PadHeightRatio` correction coefficient, FabPlot uses absolute pt sizing so no compensation is needed — both panels are automatically uniform.)
-- **Business Rules:** The following font size table is locked and zero-config. Values are mapped from the CMS/HEP relative-percentage convention (where size is expressed as a fraction of pad/canvas height) to FabPlot absolute point sizes for a standard 8 × 6 inch canvas.
+    - **Then** axis titles and tick labels in both panels are rendered at identical absolute point sizes. (Unlike ROOT/CMS where relative-to-pad-height sizing requires a `1 / PadHeightRatio` correction coefficient, DSPrinter uses absolute pt sizing so no compensation is needed — both panels are automatically uniform.)
+- **Business Rules:** The following font size table is locked and zero-config. Values are mapped from the CMS/HEP relative-percentage convention (where size is expressed as a fraction of pad/canvas height) to DSPrinter absolute point sizes for a standard 8 × 6 inch canvas.
 
-  | Element                | Weight     | FabPlot (pt) | CMS/HEP (% canvas ht) | Ratio to base |
+  | Element                | Weight     | DSPrinter (pt) | CMS/HEP (% canvas ht) | Ratio to base |
   |------------------------|------------|:------------:|:---------------------:|:-------------:|
   | Axis title (X and Y)   | Regular    | 12 pt        | ≈ 5 %                 | 1.2 ×         |
   | Tick labels (X and Y)  | Regular    | 10 pt        | ≈ 4 %                 | 1.0 × (base)  |
@@ -186,13 +186,13 @@
 - **Business Rules:** Annotations for Status (e.g., INTERNAL ONLY, DRAFT) must always be placed in the Top-Left corner.
 
 ### EPIC-6: Composite Chart Architecture (7:3 Split Layout)
-**Description:** Provide a dedicated `fabplot compare` subcommand that renders a two-panel composite figure — a main data panel (70% height) stacked above a ratio/residual panel (30% height) — enabling direct visual comparison of data vs. prediction or period-over-period change.
+**Description:** Provide a dedicated `dp compare` subcommand that renders a two-panel composite figure — a main data panel (70% height) stacked above a ratio/residual panel (30% height) — enabling direct visual comparison of data vs. prediction or period-over-period change.
 
-#### USER STORY-6.1: `fabplot compare` Subcommand
-- **User Story:** As a Yield Enhancement Engineer, I want to run `fabplot compare` with two data series so that I can see the primary distributions alongside their residuals or ratio in a single, publication-ready figure without any manual layout work.
+#### USER STORY-6.1: `dp compare` Subcommand
+- **User Story:** As a Yield Enhancement Engineer, I want to run `dp compare` with two data series so that I can see the primary distributions alongside their residuals or ratio in a single, publication-ready figure without any manual layout work.
 - **Acceptance Criteria (BDD Format):**
   - **Scenario 1:** Two-panel composite figure generated
-    - **Given** the `fabplot compare` command with valid `--x [column]`, `--y1 [series_a]`, and `--y2 [series_b]` flags
+    - **Given** the `dp compare` command with valid `--x [column]`, `--y1 [series_a]`, and `--y2 [series_b]` flags
     - **When** the command is executed
     - **Then** a composite figure is generated with the main panel occupying 70% of the canvas height and the ratio/residual panel occupying the remaining 30%.
   - **Scenario 2:** X-axes are pixel-perfect aligned
@@ -210,7 +210,7 @@
   - **Scenario 5:** Missing second series
     - **Given** only `--y1` is provided and `--y2` is omitted
     - **When** the command is executed
-    - **Then** the CLI exits with a clear error message: `"fabplot compare requires both --y1 and --y2 arguments."` and no file is created.
+    - **Then** the CLI exits with a clear error message: `"dp compare requires both --y1 and --y2 arguments."` and no file is created.
 - **Business Rules:**
   - The 70/30 height split is locked and zero-config; it cannot be adjusted via CLI flags.
   - All three-tier typography, golden margins, mirror ticks, and Petroff palette rules from EPIC-2 apply automatically to both panels.
@@ -235,7 +235,7 @@ These define how the system must behave, beyond its specific features.
 - **Performance:** Ingesting and processing large Fab CSV/Parquet files must be rapid and memory-efficient, leveraging the `Polars` data engine. Generating a plot should ideally take less than a few seconds.
 - **Maintainability:** The codebase must follow standard Python best practices (e.g., PEP 8 style, strict typing) to allow for easy extensibility by internal data science teams.
 - **Output Quality:** The visualization engine (`Matplotlib` + `Proplot`) must strictly output in vector formats to guarantee statistical legibility and "Scientific Authority."
-- **Style Integrity:** All `FabStyleContext` styling constants (golden margins, three-tier font ratios, Petroff palette, mirror-tick settings) must be immutable at runtime. Any modification to these defaults requires a versioned release and a changelog entry.
+- **Style Integrity:** All `DSPStyleContext` styling constants (golden margins, three-tier font ratios, Petroff palette, mirror-tick settings) must be immutable at runtime. Any modification to these defaults requires a versioned release and a changelog entry.
 - **Accessibility:** The Petroff palette must ensure a minimum luminance contrast ratio of 3:1 between adjacent data series in grayscale, supporting legibility for colorblind users (deuteranopia, protanopia) and monochrome print.
 
 ## 4. Glossary & Definitions
@@ -245,7 +245,7 @@ These define how the system must behave, beyond its specific features.
 - **CERN Style:** A rigorous, highly structured style of data visualization common in particle physics, prioritizing statistical clarity, metadata, and scientific authority over decorative aesthetics.
 - **Cpk:** Process Capability Index, a statistical measure of a process's ability to produce output within specification limits.
 - **UCL / LCL:** Upper Control Limit / Lower Control Limit, used in statistical process control.
-- **Three-Tier Typography:** The visual text hierarchy enforced on every FabPlot canvas: Tier-1 (Bold brand/project tag, top-left), Tier-2 (Italic status tag at 0.75–0.80x, adjacent to Tier-1), Tier-3 (Regular context info at 0.60x, top-right outside frame).
+- **Three-Tier Typography:** The visual text hierarchy enforced on every DSPrinter canvas: Tier-1 (Bold brand/project tag, top-left), Tier-2 (Italic status tag at 0.75–0.80x, adjacent to Tier-1), Tier-3 (Regular context info at 0.60x, top-right outside frame).
 - **Golden Margin:** The locked canvas margin ratios (L: 15%, B: 12%, T: 8–10%, R: 5%) derived from high-energy physics visualization standards to guarantee visual breathing room across all plot types.
 - **Mirror Ticks:** Tick marks rendered on all four sides of a plot frame, pointing inward toward the data area, enabling precise value alignment from any edge of the chart.
 - **Petroff Palette:** A colorblind-accessible, grayscale-distinguishable color set based on Petroff principles, using dark blue, orange, dark red, and gray as primary colors. Replaces high-saturation software defaults.
