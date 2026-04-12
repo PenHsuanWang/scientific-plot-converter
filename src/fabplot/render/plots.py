@@ -101,6 +101,7 @@ def render_hist1d(
         ax.set_title(f"Distribution Analysis: {x_label}")
         ax.grid(True)
 
+        _builder.autoadjust_xticklabels(ax)
         fig.savefig(output_path)
 
 
@@ -171,6 +172,7 @@ def render_trend(
         ax.set_title(f"Trend Analysis: {y_name} over {x_name}")
         ax.grid(True)
 
+        _builder.autoadjust_xticklabels(ax)
         fig.savefig(output_path)
 
 
@@ -252,4 +254,5 @@ def render_compare(
         ax_ratio.set_ylabel(ratio_label)
         ax_ratio.grid(True)
 
+        _builder.autoadjust_xticklabels(ax_ratio)
         fig.savefig(output_path)

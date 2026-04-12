@@ -80,15 +80,23 @@
     - **Given** any plot is generated
     - **When** the axes are rendered
     - **Then** tick marks appear on all four sides of the plot frame (top, bottom, left, right), and all ticks point **inward** toward the data area.
-  - **Scenario 2:** Axis title offset
+  - **Scenario 2:** Axis title offset — differentiated for X and Y
     - **Given** an axis with tick labels and a title
     - **When** the axis is rendered
-    - **Then** the axis title is centered along the axis and is offset from the tick labels by 1.2–1.5 times the axis title font height, ensuring no overlapping.
+    - **Then** the X-axis title is padded 1.1 × base font height (≈ 11 pt) from the tick labels, and the Y-axis title is padded 1.4 × base font height (≈ 14 pt) to accommodate scientific-notation exponents (e.g., ×10³) without overlap. Both titles are centred along their respective axis lines.
   - **Scenario 3:** Axis unit format
     - **Given** an axis label is defined (e.g., `Revenue`)
     - **When** the unit is provided (e.g., `M USD`)
     - **Then** the label is rendered as `Revenue [M USD]` using square-bracket unit notation.
-- **Business Rules:** Mirror tick application is automatic and zero-config. Top/right ticks display tick lines only, with no duplicate numeric labels.
+  - **Scenario 4:** X-axis tick label auto-rotation
+    - **Given** a plot with X-axis tick labels that either (a) would visually overlap adjacent labels due to crowding, or (b) exceed 6 characters in length (e.g., datetime strings such as `"2024-01-01"`)
+    - **When** the axes are finalized before the output file is written
+    - **Then** all X-axis tick labels are rotated 45° (right-aligned to the tick mark) to prevent visual crowding. Y-axis tick labels are never auto-rotated.
+  - **Scenario 5:** Tick label font size matches body text
+    - **Given** any plot is generated
+    - **When** the axes are rendered
+    - **Then** X-axis and Y-axis tick labels are rendered at `base_font_size` (10 pt), consistent with the axes label font size specified in US-2.1.
+- **Business Rules:** Mirror tick application is automatic and zero-config. Top/right ticks display tick lines only, with no duplicate numeric labels. X-axis tick labels are auto-rotated to `tick_label_max_rotation` (45°) when bounding-box overlap is detected or when any label exceeds `tick_label_rotation_threshold` (6 characters); this is zero-config and cannot be disabled by the user.
 
 #### USER STORY-2.5: Petroff-Compliant Color Palette
 - **User Story:** As a Data Science Researcher, I want FabPlot to use a Petroff-principles color palette so that all plots remain legible in both color and grayscale print, and are accessible to colorblind readers.
@@ -106,6 +114,35 @@
     - **When** the chart is inspected
     - **Then** all data series remain visually distinct through differing luminance levels.
 - **Business Rules:** The Petroff palette is the sole default palette and cannot be substituted via CLI flags. Software-default high-saturation palettes (e.g., Matplotlib tab10) are strictly prohibited.
+
+#### USER STORY-2.6: Axis Typography Quantification (CMS / HEP Reference)
+- **User Story:** As a Data Science Researcher, I want all axis titles, tick labels, and legends to follow a precise, documented size hierarchy derived from HEP/CMS publication standards so that FabPlot output matches the visual authority of CERN-style figures.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Axis title is visually larger than tick labels
+    - **Given** any plot is generated
+    - **When** the axes are rendered
+    - **Then** the axis title font size (12 pt) is strictly larger than the tick label font size (10 pt), maintaining a clear title-above-data visual hierarchy.
+  - **Scenario 2:** Bold weight is exclusive to the Tier-1 brand tag
+    - **Given** any generated plot containing axes, tick labels, legend entries, Tier-2, and Tier-3 annotation text
+    - **When** the output is inspected
+    - **Then** only the Tier-1 brand/project tag uses Bold weight; all other elements (axis titles, tick labels, legend text, Tier-2 status, Tier-3 context, stats box) strictly use Regular weight, ensuring the brand tag is the sole visual anchor and data-carrying text remains neutral.
+  - **Scenario 3:** Composite chart panels render at identical absolute font sizes
+    - **Given** a 7:3 composite (compare) chart is generated
+    - **When** the upper main panel and lower ratio panel are both inspected
+    - **Then** axis titles and tick labels in both panels are rendered at identical absolute point sizes. (Unlike ROOT/CMS where relative-to-pad-height sizing requires a `1 / PadHeightRatio` correction coefficient, FabPlot uses absolute pt sizing so no compensation is needed — both panels are automatically uniform.)
+- **Business Rules:** The following font size table is locked and zero-config. Values are mapped from the CMS/HEP relative-percentage convention (where size is expressed as a fraction of pad/canvas height) to FabPlot absolute point sizes for a standard 8 × 6 inch canvas.
+
+  | Element                | Weight     | FabPlot (pt) | CMS/HEP (% canvas ht) | Ratio to base |
+  |------------------------|------------|:------------:|:---------------------:|:-------------:|
+  | Axis title (X and Y)   | Regular    | 12 pt        | ≈ 5 %                 | 1.2 ×         |
+  | Tick labels (X and Y)  | Regular    | 10 pt        | ≈ 4 %                 | 1.0 × (base)  |
+  | Legend text            | Regular    | 10 pt        | ≈ 4 %                 | 1.0 ×         |
+  | Stats box text         | Regular    | 10 pt        | ≈ 4 %                 | 1.0 ×         |
+  | Tier-1 brand / project | **Bold**   | 14 pt        | ≈ 7.5 %               | 1.4 ×         |
+  | Tier-2 status tag      | *Italic*   | 10.8 pt      | ≈ 5.7 % (75 % of T1)  | 1.08 ×        |
+  | Tier-3 context info    | Regular    | 8.4 pt       | ≈ 4.5 %               | 0.84 ×        |
+
+  Bold weight is **strictly reserved** for the Tier-1 brand tag only. All other text elements use Regular weight regardless of semantic importance.
 
 ### EPIC-3: Standard Plot Types (Phase 1)
 **Description:** Implement the primary visualization types required for daily semiconductor analysis: Distribution Analysis (hist1d) and Time/Lot-Series (trend).

@@ -29,10 +29,14 @@ class FabStyleContext:
 
     # ── Typography ────────────────────────────────────────────────────────
     font_family: tuple[str, ...] = ("Arial", "Helvetica", "DejaVu Sans")
+    # base_font_size (10 pt) → tick labels, legend text, stats box.
+    # title_font_size (12 pt) → X/Y axis label titles AND plot title
+    #   (≈ CMS/HEP 5 % canvas-height rule for axis titles; 4 % for tick labels).
     base_font_size: float = 10.0
     title_font_size: float = 12.0
-    # Three-tier annotation base (Tier-1 uses this size as 1.0×)
-    annotation_font_size: float = 11.0
+    # Three-tier annotation base (Tier-1 = 1.0 ×, i.e. 14 pt).
+    # Tier-3 at 60 % → 8.4 pt, above the 8 pt legibility floor.
+    annotation_font_size: float = 14.0
 
     # Three-tier size ratios (locked — do not override)
     tier1_size_ratio: float = 1.00   # Bold  — brand / project tag
@@ -61,7 +65,17 @@ class FabStyleContext:
 
     # ── Axis styling ──────────────────────────────────────────────────────
     tick_direction: str = "in"
-    axis_label_pad: float = 12.0   # ≈ 1.2–1.5× font height in points
+    # X-axis title pad: 1.1 × base_font_size (= 11 pt).
+    # Y-axis title pad: 1.4 × base_font_size (= 14 pt) — extra room for
+    # scientific-notation exponents (e.g., ×10³) that sit outside tick labels.
+    axis_x_label_pad: float = 11.0
+    axis_y_label_pad: float = 14.0
+
+    # ── Tick label overflow guard ──────────────────────────────────────────
+    # X-axis labels longer than this (chars) trigger 45° auto-rotation,
+    # preventing datetime strings and other long tokens from crowding.
+    tick_label_rotation_threshold: int = 6
+    tick_label_max_rotation: float = 45.0
 
 
 #: Module-level singleton — the one authoritative style instance.
@@ -94,13 +108,21 @@ class CanvasBuilder:
         mpl.rcParams.update({
             "font.family": "sans-serif",
             "font.sans-serif": list(s.font_family),
+            # Global fallback; overridden by the specific keys below.
             "font.size": s.base_font_size,
+            # Plot title above the axes frame — 12 pt (≈ CMS 5 %).
             "axes.titlesize": s.title_font_size,
-            "axes.labelsize": s.base_font_size,
+            "axes.titleweight": "normal",    # Regular; Bold reserved for Tier-1
+            # X/Y axis label titles — 12 pt (≈ CMS 5 %).
+            "axes.labelsize": s.title_font_size,
+            "axes.labelweight": "normal",    # Regular; Bold reserved for Tier-1
+            # Tick mark numbers — 10 pt (≈ CMS 4 %).
             "xtick.labelsize": s.base_font_size,
             "ytick.labelsize": s.base_font_size,
+            # Legend and figure title — 10 pt / Regular.
             "legend.fontsize": s.base_font_size,
             "figure.titlesize": s.title_font_size,
+            "figure.titleweight": "normal",  # Regular; Bold reserved for Tier-1
             "axes.prop_cycle": make_cycler(color=list(s.petroff_palette)),
             "axes.linewidth": 1.2,
             "lines.linewidth": 1.5,
@@ -131,10 +153,47 @@ class CanvasBuilder:
             direction=s.tick_direction,
             top=True, right=True, bottom=True, left=True,
         )
-        ax.xaxis.labelpad = s.axis_label_pad
-        ax.yaxis.labelpad = s.axis_label_pad
+        ax.xaxis.labelpad = s.axis_x_label_pad
+        ax.yaxis.labelpad = s.axis_y_label_pad
 
     # ── Public API ────────────────────────────────────────────────────────
+
+    def autoadjust_xticklabels(self, ax: Axes) -> None:
+        """Rotate X-axis tick labels when they would overlap or are too long.
+
+        Triggers a canvas draw to finalise tick positions, then checks
+        two conditions — bounding-box overlap between adjacent labels and
+        label character count — and rotates all X-tick labels to
+        ``tick_label_max_rotation`` degrees (right-aligned) when either
+        condition is met.  Y-axis labels are never modified.
+
+        Call this method after all plot data and axis limits have been set,
+        immediately before ``fig.savefig()``.
+
+        :param ax: The axes whose X tick labels to inspect and adjust.
+        :type ax: matplotlib.axes.Axes
+        """
+        fig = ax.get_figure()
+        if fig is None:
+            return
+
+        fig.canvas.draw()   # finalise tick label text and pixel positions
+
+        labels = [lbl for lbl in ax.get_xticklabels() if lbl.get_text()]
+        if len(labels) < 2:
+            return
+
+        s = self._style
+        max_chars = max(len(lbl.get_text()) for lbl in labels)
+
+        bboxes = [lbl.get_window_extent() for lbl in labels]
+        overlapping = any(
+            bboxes[i].x1 > bboxes[i + 1].x0
+            for i in range(len(bboxes) - 1)
+        )
+
+        if overlapping or max_chars > s.tick_label_rotation_threshold:
+            plt.setp(labels, rotation=s.tick_label_max_rotation, ha="right")
 
     def add_three_tier_typography(
         self,
@@ -282,6 +341,7 @@ def add_stats_legend(ax: Axes, stats: dict[str, float]) -> None:
 
     props = dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="gray")
     ax.text(
-        0.97, 0.97, textstr, transform=ax.transAxes, fontsize=9,
+        0.97, 0.97, textstr, transform=ax.transAxes,
+        fontsize=FAB_STYLE_CONTEXT.base_font_size,
         verticalalignment="top", horizontalalignment="right", bbox=props,
     )

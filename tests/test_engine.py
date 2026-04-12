@@ -56,6 +56,24 @@ def test_fab_style_context_tick_direction_is_inward():
     assert FAB_STYLE_CONTEXT.tick_direction == "in"
 
 
+def test_fab_style_context_axis_label_pads_differentiated():
+    """Y-axis label pad must be larger than X to accommodate sci-notation exponents."""
+    ctx = FabStyleContext()
+    # X: 1.1 × base (11 pt); Y: 1.4 × base (14 pt)
+    assert ctx.axis_x_label_pad == pytest.approx(11.0)
+    assert ctx.axis_y_label_pad == pytest.approx(14.0)
+    assert ctx.axis_y_label_pad > ctx.axis_x_label_pad
+
+
+def test_single_canvas_applies_differentiated_axis_pads():
+    """Axes must use separate x/y label pads after single_canvas setup."""
+    builder = CanvasBuilder()
+    s = builder._style
+    with builder.single_canvas() as (fig, ax):
+        assert ax.xaxis.labelpad == pytest.approx(s.axis_x_label_pad)
+        assert ax.yaxis.labelpad == pytest.approx(s.axis_y_label_pad)
+
+
 def test_fab_style_context_font_family_contains_standard_fonts():
     """Font family tuple must include at least one standard sans-serif font."""
     fonts = {f.lower() for f in FAB_STYLE_CONTEXT.font_family}
@@ -66,6 +84,47 @@ def test_fab_style_context_singleton_is_same_instance():
     """FAB_STYLE_CONTEXT must be the module-level singleton."""
     from fabplot.render.engine import FAB_STYLE_CONTEXT as ctx2
     assert FAB_STYLE_CONTEXT is ctx2
+
+
+def test_fab_style_context_axis_label_size_larger_than_tick_size():
+    """Axis label size (12 pt) must exceed tick label size (10 pt) per US-2.6."""
+    ctx = FabStyleContext()
+    assert ctx.title_font_size > ctx.base_font_size
+
+
+# ── CanvasBuilder rcParam enforcement ────────────────────────────────────────
+
+
+def test_global_style_axis_label_size_is_title_font_size():
+    """axes.labelsize (X/Y axis titles) must be title_font_size (12 pt), not base."""
+    builder = CanvasBuilder()
+    with builder.single_canvas() as (fig, ax):
+        import matplotlib as _mpl
+        assert _mpl.rcParams["axes.labelsize"] == pytest.approx(
+            builder._style.title_font_size
+        )
+
+
+def test_global_style_tick_label_size_is_base_font_size():
+    """xtick.labelsize and ytick.labelsize must be base_font_size (10 pt)."""
+    builder = CanvasBuilder()
+    with builder.single_canvas() as (fig, ax):
+        import matplotlib as _mpl
+        assert _mpl.rcParams["xtick.labelsize"] == pytest.approx(
+            builder._style.base_font_size
+        )
+        assert _mpl.rcParams["ytick.labelsize"] == pytest.approx(
+            builder._style.base_font_size
+        )
+
+
+def test_global_style_axis_label_weight_is_regular():
+    """Axis label and title weights must be 'normal' — Bold is exclusive to Tier-1."""
+    builder = CanvasBuilder()
+    with builder.single_canvas() as (fig, ax):
+        import matplotlib as _mpl
+        assert _mpl.rcParams["axes.labelweight"] == "normal"
+        assert _mpl.rcParams["axes.titleweight"] == "normal"
 
 
 # ── CanvasBuilder — single_canvas ─────────────────────────────────────────────
@@ -274,4 +333,48 @@ def test_add_stats_legend_empty_stats_no_crash():
     """An empty stats dict must not raise — defaults to zero."""
     fig, ax = plt.subplots()
     add_stats_legend(ax, {})
+    plt.close(fig)
+
+
+# ── autoadjust_xticklabels ────────────────────────────────────────────────────
+
+
+def test_fab_style_context_tick_rotation_constants_exist():
+    """Style context must expose tick-label rotation threshold and max angle."""
+    ctx = FabStyleContext()
+    assert ctx.tick_label_rotation_threshold == 6
+    assert ctx.tick_label_max_rotation == pytest.approx(45.0)
+
+
+def test_autoadjust_xticklabels_rotates_long_labels():
+    """Datetime-length labels (> 6 chars) must be auto-rotated to 45°."""
+    builder = CanvasBuilder()
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xticks([1, 2, 3])
+    ax.set_xticklabels(["2024-01-01", "2024-02-01", "2024-03-01"])
+    builder.autoadjust_xticklabels(ax)
+    labels = [lbl for lbl in ax.get_xticklabels() if lbl.get_text()]
+    assert labels[0].get_rotation() == pytest.approx(45.0)
+    plt.close(fig)
+
+
+def test_autoadjust_xticklabels_no_rotation_for_short_labels():
+    """Single-digit numeric labels must stay at 0° — no unnecessary rotation."""
+    builder = CanvasBuilder()
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.set_xticks([1, 2, 3])
+    ax.set_xticklabels(["1", "2", "3"])
+    builder.autoadjust_xticklabels(ax)
+    labels = [lbl for lbl in ax.get_xticklabels() if lbl.get_text()]
+    assert labels[0].get_rotation() == pytest.approx(0.0)
+    plt.close(fig)
+
+
+def test_autoadjust_xticklabels_single_label_is_noop():
+    """A single tick label must not raise and must not be rotated."""
+    builder = CanvasBuilder()
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xticks([1])
+    ax.set_xticklabels(["only-one-long-label"])
+    builder.autoadjust_xticklabels(ax)   # must not raise
     plt.close(fig)
