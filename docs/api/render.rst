@@ -1,12 +1,12 @@
 Render Engine & Plots
 ======================
 
-.. automodule:: fabplot.render.engine
+.. automodule:: dsprinter.render.engine
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: fabplot.render.plots
+.. automodule:: dsprinter.render.plots
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,8 +1,8 @@
-# FabPlot-CLI
+# dsprinter
 
 A standardized Python Command-Line Interface (CLI) utility designed to generate publication-quality, "Scientific-Grade" visualizations from semiconductor manufacturing data (CSV/Parquet).
 
-**FabPlot-CLI** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces the **Advanced Data Visualization Layout Standard** — a high-energy physics–inspired style system — for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
+**dsprinter** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces the **Advanced Data Visualization Layout Standard** — a high-energy physics–inspired style system — for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
 
 ## Features
 
@@ -40,15 +40,15 @@ from two tools (`Tool_A_CD` and `Tool_B_CD`). Use it to verify your installation
 
 ```bash
 # Single-column distribution — auto-saved to figure_out/demo_histogram_data_hist1d.pdf
-fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD
+dp hist1d --input demo_histogram_data.csv --x Tool_A_CD
 
 # With full three-tier annotation and explicit output path
-fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD \
+dp hist1d --input demo_histogram_data.csv --x Tool_A_CD \
   --project "WaferFab / CD Monitor" --status "Simulation" \
   --context "2024-Q4 · N=200" --output tool_a_dist.pdf
 
 # Overlay two columns on the same histogram (repeat --x for each column)
-fabplot hist1d --input demo_histogram_data.csv \
+dp hist1d --input demo_histogram_data.csv \
   --x Tool_A_CD --x Tool_B_CD \
   --project "WaferFab / CD Monitor" --status "Simulation" \
   --context "2024-Q4 · N=200" --output tool_overlay.pdf
@@ -58,10 +58,10 @@ Output files are automatically routed to `figure_out/` (created on first run if 
 
 ## Usage
 
-You can invoke the CLI using the `fabplot` command. To see all available commands and options, use the `--help` flag:
+You can invoke the CLI using the `dp` command. To see all available commands and options, use the `--help` flag:
 
 ```bash
-fabplot --help
+dp --help
 ```
 
 ### Three-Tier Annotation Flags
@@ -75,7 +75,7 @@ All commands accept three optional annotation flags that embed structured metada
 | `--context` | 3 — Context label | Regular (60% size) | Upper-right | `"2024-Q1 · N=1200"` |
 
 ```bash
-fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD \
+dp hist1d --input demo_histogram_data.csv --x Tool_A_CD \
   --project "Fab12 / CD Monitor" --status "Internal Use Only" \
   --context "2024-Q4 · N=200"
 ```
@@ -87,18 +87,18 @@ Repeat `--x` to overlay multiple column distributions on the same canvas.
 
 ```bash
 # Basic usage (outputs to figure_out/data_hist1d.pdf by default)
-fabplot hist1d --input data.csv --x CD_Value
+dp hist1d --input data.csv --x CD_Value
 
 # Normalize to Yield Density (PDF) and specify custom output
-fabplot hist1d --input process_data.parquet --x Threshold_Voltage --norm --output yield_dist.svg
+dp hist1d --input process_data.parquet --x Threshold_Voltage --norm --output yield_dist.svg
 
 # With full three-tier annotation
-fabplot hist1d --input process_data.parquet --x Threshold_Voltage \
+dp hist1d --input process_data.parquet --x Threshold_Voltage \
   --project "WaferFab / Vth Monitor" --status "Simulation" \
   --context "2024-Q4 · N=3000" --output vth_dist.pdf
 
 # Overlay two columns — repeat --x for each series (shared bin range, Petroff colors)
-fabplot hist1d --input demo_histogram_data.csv \
+dp hist1d --input demo_histogram_data.csv \
   --x Tool_A_CD --x Tool_B_CD \
   --project "WaferFab / CD Monitor" --status "Simulation" \
   --context "2024-Q4 · N=200" --output tool_overlay.pdf
@@ -110,10 +110,10 @@ Plot a metric over time or lot number to identify process drifts or excursions.
 
 ```bash
 # Plot CD_Value over LotID
-fabplot trend --input lot_summary.csv --x LotID --y CD_Value
+dp trend --input lot_summary.csv --x LotID --y CD_Value
 
 # With annotation and custom output
-fabplot trend --input lot_summary.csv --x LotID --y CD_Value \
+dp trend --input lot_summary.csv --x LotID --y CD_Value \
   --project "Fab12 / Etch Dept" --status "Draft" \
   --context "Jan–Mar 2025" --output cd_trend.pdf
 ```
@@ -125,11 +125,11 @@ The X-axes are fused so both panels share the same scale and alignment.
 
 ```bash
 # Compare two columns (ratio = y2 / y1)
-fabplot compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
+dp compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
   --output cd_ratio.pdf
 
 # With three-tier annotation
-fabplot compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
+dp compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
   --project "Fab12 / CD Metrology" --status "Preliminary" \
   --context "2025-Q1 · N=480" --output cd_ratio_annotated.pdf
 ```
@@ -142,13 +142,13 @@ fabplot compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD
 
 ```
 scientific-plot-converter/
-├── src/fabplot/
+├── src/dsprinter/
 │   ├── __init__.py       # package version (__version__)
 │   ├── cli.py            # Typer entry points: hist1d, trend, compare (+ three-tier flags)
 │   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
 │   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk, binning, calculate_ratio)
 │   └── render/
-│       ├── engine.py     # FabStyleContext (frozen dataclass), CanvasBuilder (golden margins,
+│       ├── engine.py     # DSPStyleContext (frozen dataclass), CanvasBuilder (golden margins,
 │       │                 #   mirror ticks, Petroff palette, three-tier typography)
 │       └── plots.py      # render_hist1d, render_trend, render_compare (7:3 composite)
 ├── tests/
@@ -266,7 +266,7 @@ tox
 
 # Or target a single environment
 tox -e lint    # ruff + flake8 + mypy
-tox -e test    # pytest --cov=fabplot
+tox -e test    # pytest --cov=dsprinter
 ```
 
 `tox` builds a source distribution from `pyproject.toml`, installs it into an isolated virtualenv, then runs the commands — mirroring exactly what GitHub Actions does.
@@ -297,7 +297,7 @@ push / pull_request
         │
         └─── Job: tox (matrix)
                   ├── tox -e lint   →  ruff + flake8 + mypy
-                  └── tox -e test   →  pytest --cov=fabplot
+                  └── tox -e test   →  pytest --cov=dsprinter
 ```
 
 The two tox matrix jobs run in parallel. All three jobs must pass before a pull request can be merged.
@@ -317,7 +317,7 @@ flake8 src tests
 mypy src
 
 # pytest with coverage
-pytest --cov=fabplot --cov-report=term-missing
+pytest --cov=dsprinter --cov-report=term-missing
 
 # Run all pre-commit hooks without committing
 pre-commit run --all-files
@@ -331,7 +331,7 @@ pre-commit run --all-files
 1. git clone + uv pip install -e ".[dev]"   # one-time setup
 2. pre-commit install                         # one-time: register git hooks
         ↓
-3. Edit source code in src/fabplot/
+3. Edit source code in src/dsprinter/
         ↓
 4. git add <files>
         ↓
@@ -366,7 +366,7 @@ consistent across all files and to create annotated git tags automatically.
 | File | Field |
 |---|---|
 | `pyproject.toml` | `version = "..."` under `[project]` and `current_version` under `[tool.bumpversion]` |
-| `src/fabplot/__init__.py` | `__version__ = "..."` |
+| `src/dsprinter/__init__.py` | `__version__ = "..."` |
 
 **Never edit these manually.** Always use the `bump-my-version` commands below.
 
@@ -392,7 +392,7 @@ bump-my-version bump patch
 
 This will:
 
-1. Update `version` in `pyproject.toml` and `__version__` in `src/fabplot/__init__.py`
+1. Update `version` in `pyproject.toml` and `__version__` in `src/dsprinter/__init__.py`
 2. Create a git commit: `Bump version: 0.1.0 to 0.1.1`
 3. Create an annotated git tag: `v0.1.1`
 
@@ -416,7 +416,7 @@ tag push v*.*.*
         |
         +-- Job: ci          (lint + test must pass)
         |         +-- tox -e lint   ->  ruff + flake8 + mypy
-        |         +-- tox -e test   ->  pytest --cov=fabplot
+        |         +-- tox -e test   ->  pytest --cov=dsprinter
         |
         +-- Job: build       (needs: ci)
         |         +-- python -m build  ->  dist/ sdist + wheel

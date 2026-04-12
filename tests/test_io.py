@@ -1,9 +1,9 @@
-"""Tests for fabplot.data.io — CSV/Parquet loading and error handling."""
+"""Tests for dsprinter.data.io — CSV/Parquet loading and error handling."""
 
 import pytest
 import polars as pl
 
-from fabplot.data.io import load_data
+from dsprinter.data.io import load_data
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────

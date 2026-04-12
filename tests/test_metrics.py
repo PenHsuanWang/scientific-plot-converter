@@ -1,9 +1,9 @@
-"""Tests for fabplot.stats.metrics — calculate_metrics, smart bins, ratio."""
+"""Tests for dsprinter.stats.metrics — calculate_metrics, smart bins, ratio."""
 
 import numpy as np
 import pytest
 
-from fabplot.stats.metrics import (
+from dsprinter.stats.metrics import (
     calculate_metrics,
     calculate_ratio,
     calculate_smart_bins,

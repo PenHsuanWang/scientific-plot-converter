@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../src'))
 
-project = 'FabPlot-CLI'
+project = 'dsprinter'
 copyright = '2026'
 author = 'Ben Wang'
 release = '0.1.0'

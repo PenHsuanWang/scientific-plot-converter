@@ -4,18 +4,18 @@ from pathlib import Path
 
 import numpy as np
 
-from fabplot.render.engine import (
+from dsprinter.render.engine import (
     CanvasBuilder,
-    FAB_STYLE_CONTEXT,
+    DSP_STYLE_CONTEXT,
     add_stats_legend,
 )
-from fabplot.stats.metrics import (
+from dsprinter.stats.metrics import (
     calculate_metrics,
     calculate_ratio,
     calculate_smart_bins,
 )
 
-_builder = CanvasBuilder(FAB_STYLE_CONTEXT)
+_builder = CanvasBuilder(DSP_STYLE_CONTEXT)
 
 
 def render_hist1d(
@@ -58,7 +58,7 @@ def render_hist1d(
         column_name if isinstance(column_name, list) else [column_name]
     )
 
-    palette = FAB_STYLE_CONTEXT.petroff_palette
+    palette = DSP_STYLE_CONTEXT.petroff_palette
     valid_arrays = [arr[~np.isnan(arr)] for arr in data_list]
     multi = len(data_list) > 1
 
@@ -137,7 +137,7 @@ def render_trend(
     :param context: Tier-3 context string (top-right, 60 % size).
     :type context: str or None
     """
-    palette = FAB_STYLE_CONTEXT.petroff_palette
+    palette = DSP_STYLE_CONTEXT.petroff_palette
 
     with _builder.single_canvas(
         project=project, status=status, context=context
@@ -217,7 +217,7 @@ def render_compare(
     :param context: Tier-3 context string (top-right, 60 % size).
     :type context: str or None
     """
-    palette = FAB_STYLE_CONTEXT.petroff_palette
+    palette = DSP_STYLE_CONTEXT.petroff_palette
     sort_idx = np.argsort(x_data)
     x_s = x_data[sort_idx]
     y1_s = y1_data[sort_idx]

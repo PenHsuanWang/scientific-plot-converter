@@ -1,4 +1,4 @@
-"""Tests for fabplot.render.engine — CanvasBuilder, FabStyleContext, helpers."""
+"""Tests for dsprinter.render.engine — CanvasBuilder, DSPStyleContext, helpers."""
 
 import matplotlib
 matplotlib.use("Agg")  # noqa: E402 — must be set before any other mpl import
@@ -6,33 +6,33 @@ matplotlib.use("Agg")  # noqa: E402 — must be set before any other mpl import
 import matplotlib.pyplot as plt  # noqa: E402
 import pytest  # noqa: E402
 
-from fabplot.render.engine import (  # noqa: E402
-    FAB_STYLE_CONTEXT,
+from dsprinter.render.engine import (  # noqa: E402
+    DSP_STYLE_CONTEXT,
     CanvasBuilder,
-    FabStyleContext,
+    DSPStyleContext,
     add_stats_legend,
 )
 
 
-# ── FabStyleContext value-object tests ────────────────────────────────────────
+# ── DSPStyleContext value-object tests ────────────────────────────────────────
 
 
 def test_fab_style_context_is_frozen():
     """Mutations on the frozen dataclass must raise AttributeError."""
     with pytest.raises((AttributeError, TypeError)):
-        FAB_STYLE_CONTEXT.margin_left = 0.99  # type: ignore[misc]
+        DSP_STYLE_CONTEXT.margin_left = 0.99  # type: ignore[misc]
 
 
 def test_fab_style_context_tier_size_ratios_within_spec():
     """Tier-2 must be 75–80 % of Tier-1; Tier-3 must be ~60 %."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert 0.75 <= ctx.tier2_size_ratio <= 0.80
     assert ctx.tier3_size_ratio == pytest.approx(0.60, abs=0.01)
 
 
 def test_fab_style_context_golden_margins():
     """Margin constants must match the layout specification exactly."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert ctx.margin_left == pytest.approx(0.15)
     assert ctx.margin_right == pytest.approx(0.05)
     assert 0.08 <= ctx.margin_top <= 0.10
@@ -41,24 +41,24 @@ def test_fab_style_context_golden_margins():
 
 def test_fab_style_context_petroff_palette_length():
     """Petroff palette must have exactly 10 entries."""
-    assert len(FAB_STYLE_CONTEXT.petroff_palette) == 10
+    assert len(DSP_STYLE_CONTEXT.petroff_palette) == 10
 
 
 def test_fab_style_context_petroff_no_pure_red_or_green_at_front():
     """Primary slots must not be pure #ff0000 or #00ff00."""
-    c1, c2 = FAB_STYLE_CONTEXT.petroff_palette[:2]
+    c1, c2 = DSP_STYLE_CONTEXT.petroff_palette[:2]
     assert c1.lower() not in ("#ff0000", "#00ff00")
     assert c2.lower() not in ("#ff0000", "#00ff00")
 
 
 def test_fab_style_context_tick_direction_is_inward():
     """Tick direction must be 'in' to produce four-sided mirror ticks."""
-    assert FAB_STYLE_CONTEXT.tick_direction == "in"
+    assert DSP_STYLE_CONTEXT.tick_direction == "in"
 
 
 def test_fab_style_context_axis_label_pads_differentiated():
     """Y-axis label pad must be larger than X to accommodate sci-notation exponents."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     # X: 1.1 × base (11 pt); Y: 1.4 × base (14 pt)
     assert ctx.axis_x_label_pad == pytest.approx(11.0)
     assert ctx.axis_y_label_pad == pytest.approx(14.0)
@@ -76,19 +76,19 @@ def test_single_canvas_applies_differentiated_axis_pads():
 
 def test_fab_style_context_font_family_contains_standard_fonts():
     """Font family tuple must include at least one standard sans-serif font."""
-    fonts = {f.lower() for f in FAB_STYLE_CONTEXT.font_family}
+    fonts = {f.lower() for f in DSP_STYLE_CONTEXT.font_family}
     assert fonts & {"arial", "helvetica", "dejavu sans"}
 
 
 def test_fab_style_context_singleton_is_same_instance():
-    """FAB_STYLE_CONTEXT must be the module-level singleton."""
-    from fabplot.render.engine import FAB_STYLE_CONTEXT as ctx2
-    assert FAB_STYLE_CONTEXT is ctx2
+    """DSP_STYLE_CONTEXT must be the module-level singleton."""
+    from dsprinter.render.engine import DSP_STYLE_CONTEXT as ctx2
+    assert DSP_STYLE_CONTEXT is ctx2
 
 
 def test_fab_style_context_axis_label_size_larger_than_tick_size():
     """Axis label size (12 pt) must exceed tick label size (10 pt) per US-2.6."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert ctx.title_font_size > ctx.base_font_size
 
 
@@ -341,7 +341,7 @@ def test_add_stats_legend_empty_stats_no_crash():
 
 def test_fab_style_context_tick_rotation_constants_exist():
     """Style context must expose tick-label rotation threshold and max angle."""
-    ctx = FabStyleContext()
+    ctx = DSPStyleContext()
     assert ctx.tick_label_rotation_threshold == 6
     assert ctx.tick_label_max_rotation == pytest.approx(45.0)
 

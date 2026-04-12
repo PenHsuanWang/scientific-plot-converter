@@ -4,7 +4,7 @@ By adopting this, your team moves from "looking at charts" to "performing visual
 
 ## ---
 
-**Project: FabPlot-CLI**
+**Project: dsprinter**
 
 **Objective:** A standardized Python CLI utility to generate publication-quality, "Scientific-Grade" visualizations from Fab CSV data, enforcing a uniform corporate/research style for internal reports and external whitepapers.
 
@@ -26,7 +26,7 @@ The tool must follow a **Declarative Approach**: The user defines the "What," an
 #### **A. Core Input/Output**
 
 * **Input:** Multi-column CSV/Parquet files (e.g., Metrology data, WAT/CP test results).
-* **Command Structure:** fabplot \[PLOT\_TYPE\] \--input \[FILE\] \[MAPPING\_FLAGS\] \[STYLE\_FLAGS\]
+* **Command Structure:** dsprinter \[PLOT\_TYPE\] \--input \[FILE\] \[MAPPING\_FLAGS\] \[STYLE\_FLAGS\]
 
 #### **B. Plot Types (Phase 1\)**
 

@@ -1,4 +1,4 @@
-"""CLI entry points for FabPlot-CLI.
+"""CLI entry points for dsprinter.
 
 Defines the ``hist1d``, ``trend``, and ``compare`` commands, parses user
 arguments, and delegates to the rendering pipeline.
@@ -10,12 +10,12 @@ from typing import List, Optional
 
 import typer
 
-from fabplot.data.io import load_data
-from fabplot.render.plots import render_compare, render_hist1d, render_trend
+from dsprinter.data.io import load_data
+from dsprinter.render.plots import render_compare, render_hist1d, render_trend
 
 app = typer.Typer(
     help=(
-        "FabPlot-CLI: A standardized Python CLI utility to generate"
+        "dsprinter: A standardized Python CLI utility to generate"
         " 'Scientific-Grade' semiconductor visualizations."
     ),
     add_completion=False,
