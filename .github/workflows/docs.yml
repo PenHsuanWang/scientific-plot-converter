@@ -1,0 +1,74 @@
+name: Docs
+
+# Build and publish Sphinx HTML to the gh-pages branch whenever source
+# changes land on master.  The gh-pages branch is then served by GitHub Pages.
+# On pull requests targeting dev or master, only the build step runs (no deploy)
+# to catch documentation errors before merge.
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["dev", "master"]
+  workflow_dispatch:   # allow one-click manual rebuild from the Actions tab
+
+# Only one deploy can run at a time; cancel any in-progress run when a
+# newer push arrives.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # ── Job 1: build docs (runs on every push/PR trigger) ─────────────────────
+  build:
+    name: Build Sphinx docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install package + Sphinx dependencies
+        # autodoc imports the live package, so the package itself must be
+        # installed before sphinx-build runs.
+        run: pip install -e ".[dev]"
+
+      - name: Build HTML documentation
+        run: sphinx-build -b html docs docs/_build/html
+
+      - name: Upload HTML as artifact (for PR review or manual deploy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sphinx-html
+          path: docs/_build/html/
+          retention-days: 7
+
+  # ── Job 2: deploy to gh-pages (only on push to master) ────────────────────
+  deploy:
+    name: Deploy → gh-pages
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+
+    # Required to push to the gh-pages branch via GITHUB_TOKEN.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sphinx-html
+          path: docs/_build/html/
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
+          # Writes a .nojekyll file so GitHub Pages serves the Sphinx _static/
+          # directory without Jekyll stripping underscore-prefixed folders.
+          enable_jekyll: false

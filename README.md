@@ -2,16 +2,19 @@
 
 A standardized Python Command-Line Interface (CLI) utility designed to generate publication-quality, "Scientific-Grade" visualizations from semiconductor manufacturing data (CSV/Parquet).
 
-**FabPlot-CLI** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces a strict corporate/research style (the "CERN Layout") for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
+**FabPlot-CLI** moves your team from basic business intelligence charts to statistically sound "visual metrology." It enforces the **Advanced Data Visualization Layout Standard** — a high-energy physics–inspired style system — for internal reports and external whitepapers, prioritizing statistical authority, accessibility, and precision.
 
 ## Features
 
-- **"Scientific Style" Enforcement:** Automatically applies locked typography (10pt/12pt Arial/Helvetica), high-contrast color-blind friendly palettes (with hatching), and strict vector outputs (`.pdf`, `.svg`) to prevent pixelation.
-- **The "Fab-Header":** Automatically renders standardized metadata blocks (File Name, Record Count, etc.) and a statistical legend ($N$, $\mu$, $\sigma$, $C_{pk}$) directly on the canvas without obscuring the data.
+- **Three-Tier Typography System:** Every chart carries three structured annotation layers — a **bold** Tier-1 project/brand tag (lower-left), an *italic* Tier-2 data-status tag (same line, 75% size), and a regular-weight Tier-3 context label (upper-right, for time range / sample count).
+- **Golden Margin Layout:** Canvas margins are locked at `L: 15%, R: 5%, T: 9%, B: 12%` to guarantee consistent breathing room across all plot types, regardless of tick label length.
+- **Mirror Ticks:** All four chart borders carry inward-facing tick marks, enabling precise value read-off from any edge of the plot — a standard from high-energy physics publishing.
+- **Petroff Color Palette:** Replaces software-default saturated colors with the Petroff (2021) palette — high-contrast, grayscale-distinguishable, and color-vision-deficiency friendly.
 - **High-Performance Ingestion:** Powered by `Polars` to rapidly ingest and process massive multi-column CSV and Parquet files commonly found in Fab environments.
 - **Smart Analytics:**
-  - **hist1d:** Distribution Analysis with smart binning (using the Freedman-Diaconis rule to avoid aliasing in semiconductor distributions) and Yield Density (PDF) normalization.
+  - **hist1d:** Distribution Analysis with smart binning (Freedman-Diaconis rule) and optional Yield Density (PDF) normalization.
   - **trend:** Time-Series or Lot-Series analysis with automatic Control Limits (UCL/LCL at $\pm 3\sigma$) rendered as subtle shaded regions.
+  - **compare:** 7:3 composite layout — primary data panel (70%) stacked above a ratio/residual panel (30%), with fused X-axes for direct alignment.
 
 ## Prerequisites
 
@@ -30,6 +33,29 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
+## Quick Start
+
+The repository ships with `demo_histogram_data.csv` — 200 simulated CD measurements
+from two tools (`Tool_A_CD` and `Tool_B_CD`). Use it to verify your installation:
+
+```bash
+# Single-column distribution — auto-saved to figure_out/demo_histogram_data_hist1d.pdf
+fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD
+
+# With full three-tier annotation and explicit output path
+fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD \
+  --project "WaferFab / CD Monitor" --status "Simulation" \
+  --context "2024-Q4 · N=200" --output tool_a_dist.pdf
+
+# Overlay two columns on the same histogram (repeat --x for each column)
+fabplot hist1d --input demo_histogram_data.csv \
+  --x Tool_A_CD --x Tool_B_CD \
+  --project "WaferFab / CD Monitor" --status "Simulation" \
+  --context "2024-Q4 · N=200" --output tool_overlay.pdf
+```
+
+Output files are automatically routed to `figure_out/` (created on first run if it does not exist).
+
 ## Usage
 
 You can invoke the CLI using the `fabplot` command. To see all available commands and options, use the `--help` flag:
@@ -38,16 +64,44 @@ You can invoke the CLI using the `fabplot` command. To see all available command
 fabplot --help
 ```
 
+### Three-Tier Annotation Flags
+
+All commands accept three optional annotation flags that embed structured metadata directly on the canvas:
+
+| Flag | Tier | Style | Position | Example value |
+|---|---|---|---|---|
+| `--project` | 1 — Brand/Project tag | **Bold** | Lower-left | `"ACME / PROC-42"` |
+| `--status` | 2 — Data-status tag | *Italic* (75% size) | Next to Tier-1 | `"Preliminary"` |
+| `--context` | 3 — Context label | Regular (60% size) | Upper-right | `"2024-Q1 · N=1200"` |
+
+```bash
+fabplot hist1d --input demo_histogram_data.csv --x Tool_A_CD \
+  --project "Fab12 / CD Monitor" --status "Internal Use Only" \
+  --context "2024-Q4 · N=200"
+```
+
 ### 1. Distribution Analysis (`hist1d`)
 
 Generate a 1D histogram to visually analyze yield distribution and compare lots.
+Repeat `--x` to overlay multiple column distributions on the same canvas.
 
 ```bash
-# Basic usage (outputs to data_hist1d.pdf by default)
+# Basic usage (outputs to figure_out/data_hist1d.pdf by default)
 fabplot hist1d --input data.csv --x CD_Value
 
 # Normalize to Yield Density (PDF) and specify custom output
 fabplot hist1d --input process_data.parquet --x Threshold_Voltage --norm --output yield_dist.svg
+
+# With full three-tier annotation
+fabplot hist1d --input process_data.parquet --x Threshold_Voltage \
+  --project "WaferFab / Vth Monitor" --status "Simulation" \
+  --context "2024-Q4 · N=3000" --output vth_dist.pdf
+
+# Overlay two columns — repeat --x for each series (shared bin range, Petroff colors)
+fabplot hist1d --input demo_histogram_data.csv \
+  --x Tool_A_CD --x Tool_B_CD \
+  --project "WaferFab / CD Monitor" --status "Simulation" \
+  --context "2024-Q4 · N=200" --output tool_overlay.pdf
 ```
 
 ### 2. Trend Analysis (`trend`)
@@ -57,6 +111,27 @@ Plot a metric over time or lot number to identify process drifts or excursions.
 ```bash
 # Plot CD_Value over LotID
 fabplot trend --input lot_summary.csv --x LotID --y CD_Value
+
+# With annotation and custom output
+fabplot trend --input lot_summary.csv --x LotID --y CD_Value \
+  --project "Fab12 / Etch Dept" --status "Draft" \
+  --context "Jan–Mar 2025" --output cd_trend.pdf
+```
+
+### 3. Comparative Analysis (`compare`)
+
+Generate a 7:3 composite chart — a primary data panel (70%) stacked above a ratio panel (30%).
+The X-axes are fused so both panels share the same scale and alignment.
+
+```bash
+# Compare two columns (ratio = y2 / y1)
+fabplot compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
+  --output cd_ratio.pdf
+
+# With three-tier annotation
+fabplot compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
+  --project "Fab12 / CD Metrology" --status "Preliminary" \
+  --context "2025-Q1 · N=480" --output cd_ratio_annotated.pdf
 ```
 
 ---
@@ -68,16 +143,49 @@ fabplot trend --input lot_summary.csv --x LotID --y CD_Value
 ```
 scientific-plot-converter/
 ├── src/fabplot/
-│   ├── cli.py            # Typer entry points and CLI command definitions
+│   ├── __init__.py       # package version (__version__)
+│   ├── cli.py            # Typer entry points: hist1d, trend, compare (+ three-tier flags)
 │   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
-│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk) and smart binning
-│   └── render/           # Matplotlib engine enforcing the "CERN Layout"
+│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk, binning, calculate_ratio)
+│   └── render/
+│       ├── engine.py     # FabStyleContext (frozen dataclass), CanvasBuilder (golden margins,
+│       │                 #   mirror ticks, Petroff palette, three-tier typography)
+│       └── plots.py      # render_hist1d, render_trend, render_compare (7:3 composite)
 ├── tests/
-│   └── test_cli.py       # pytest test suite
+│   ├── test_cli.py       # CLI integration tests (hist1d, trend, compare, routing)
+│   ├── test_io.py        # Data loading and format tests
+│   ├── test_metrics.py   # Statistical calculation tests
+│   └── test_engine.py    # Canvas rendering and typography tests (99 tests total)
+├── docs/                 # Sphinx source; build with: sphinx-build -b html docs docs/_build/html
+│   ├── conf.py
+│   ├── index.rst
+│   └── api/              # autodoc stubs for all modules
+├── figure_out/           # ← auto-created at runtime; in .gitignore
 ├── .pre-commit-config.yaml
+├── .gitignore
 ├── tox.ini
-├── pyproject.toml
-└── .github/workflows/ci.yml
+├── pyproject.toml        # version source of truth + [tool.bumpversion] config
+└── .github/
+    └── workflows/
+        ├── ci.yml        # runs on push/PR to main
+        └── release.yml   # runs on v* tags → GitHub Release
+```
+
+---
+
+### Building the API Documentation (Sphinx)
+
+The `docs/` directory contains a Sphinx project with autodoc stubs for all modules.
+
+```bash
+# One-time: install the package first (autodoc imports the live code)
+source .venv/bin/activate
+
+# Build HTML docs
+sphinx-build -b html docs docs/_build/html
+
+# Open in browser
+open docs/_build/html/index.html
 ```
 
 ---
@@ -245,3 +353,89 @@ pre-commit run --all-files
         ↓
 9. Open / merge Pull Request
 ```
+---
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`) and uses
+[bump-my-version](https://github.com/callowayproject/bump-my-version) to keep the version string
+consistent across all files and to create annotated git tags automatically.
+
+### Version sources (kept in sync automatically)
+
+| File | Field |
+|---|---|
+| `pyproject.toml` | `version = "..."` under `[project]` and `current_version` under `[tool.bumpversion]` |
+| `src/fabplot/__init__.py` | `__version__ = "..."` |
+
+**Never edit these manually.** Always use the `bump-my-version` commands below.
+
+### How to cut a release
+
+**Step 1 — Decide the bump type**
+
+| Change type | Command | Example |
+|---|---|---|
+| Bug fix / patch | `bump-my-version bump patch` | `0.1.0` to `0.1.1` |
+| New feature, backward-compatible | `bump-my-version bump minor` | `0.1.0` to `0.2.0` |
+| Breaking change | `bump-my-version bump major` | `0.1.0` to `1.0.0` |
+
+**Step 2 - Run the bump command** (working tree must be clean)
+
+```bash
+# Activate your virtual environment first
+source .venv/bin/activate
+
+# Example: patch release
+bump-my-version bump patch
+```
+
+This will:
+
+1. Update `version` in `pyproject.toml` and `__version__` in `src/fabplot/__init__.py`
+2. Create a git commit: `Bump version: 0.1.0 to 0.1.1`
+3. Create an annotated git tag: `v0.1.1`
+
+The commit skips pre-commit hooks (`commit_args = "--no-verify"`) because the version bump
+itself is always valid.
+
+**Step 3 - Push the commit and tag together**
+
+```bash
+git push --follow-tags
+```
+
+`--follow-tags` pushes both the commit and the annotated tag in one command.
+
+### What happens on GitHub after the tag is pushed
+
+The tag push triggers `.github/workflows/release.yml`:
+
+```
+tag push v*.*.*
+        |
+        +-- Job: ci          (lint + test must pass)
+        |         +-- tox -e lint   ->  ruff + flake8 + mypy
+        |         +-- tox -e test   ->  pytest --cov=fabplot
+        |
+        +-- Job: build       (needs: ci)
+        |         +-- python -m build  ->  dist/ sdist + wheel
+        |         +-- upload dist/ as artifact
+        |
+        +-- Job: release     (needs: build)
+                  +-- gh release create v*.*.*
+                      +-- title: "Release v*.*.*"
+                      +-- release notes: auto-generated from commits
+                      +-- assets: sdist (.tar.gz) + wheel (.whl)
+```
+
+The release is visible at **GitHub > Releases**. No manual upload steps are needed.
+
+### Preview a bump without changing anything
+
+```bash
+bump-my-version bump patch --dry-run --verbose
+```
+
+This shows exactly which lines in which files would change, what commit message and tag would be
+created - without writing anything to disk.

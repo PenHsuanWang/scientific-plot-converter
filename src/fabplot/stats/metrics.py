@@ -71,3 +71,24 @@ def calculate_smart_bins(data: np.ndarray) -> int:
     bins = int(np.ceil(data_range / bin_width))
 
     return max(10, min(bins, 200))
+
+
+def calculate_ratio(
+    y1: "np.ndarray",
+    y2: "np.ndarray",
+) -> "np.ndarray":
+    """Calculate element-wise ratio ``y1 / y2`` for the compare panel.
+
+    Zero or NaN denominators produce ``NaN`` entries without raising
+    a ``ZeroDivisionError``.
+
+    :param y1: Numerator array (e.g. measured data).
+    :type y1: numpy.ndarray
+    :param y2: Denominator array (e.g. simulation / reference).
+    :type y2: numpy.ndarray
+    :returns: Array of ratio values; ``NaN`` where ``y2`` is zero or NaN.
+    :rtype: numpy.ndarray
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where((y2 != 0) & ~np.isnan(y2), y1 / y2, np.nan)
+    return ratio.astype(float)
