@@ -3,6 +3,9 @@
 This document describes the Git workflow, branch strategy, pre-commit quality
 gates, and CI/CD pipeline used by this project.
 
+> 📖 **For the full developer SOP** (implementation order, typography constants,
+> architecture decisions, release recovery steps) see **[HANDBOOK.md](HANDBOOK.md)**.
+
 ---
 
 ## Table of Contents
@@ -21,27 +24,34 @@ gates, and CI/CD pipeline used by this project.
 
 ## 1. Git Flow Overview
 
+This project uses a **two-protected-branch** model:
+
 ```
-                         ┌─────────────────────────────────┐
-                         │             GitHub               │
-                         │                                  │
-  ┌──────────────────────┤  main  (protected, merge-only)  │
-  │                      └───────────────┬─────────────────┘
-  │                                      │ PR merge
-  │  feature/<N>-<slug>  ────────────────┘
+                         ┌──────────────────────────────────────┐
+                         │              GitHub                    │
+                         │                                        │
+  ┌──────────────────────┤  master  (protected, merge-only)      │
+  │                      └────────────────┬───────────────────────┘
+  │                                       │ PR merge (dev → master)
+  │  ┌────────────────────────────────────┤
+  │  │  dev  (protected, integration)     │
+  │  └────────────────┬───────────────────┘
+  │                   │ PR merge (feature → dev)
+  │  feature/<N>-<slug>
   │
-  │  Each feature lives on its own branch.
-  │  No direct pushes to main — changes arrive only via Pull Request.
+  │  Each feature lives on its own branch and merges to dev first.
+  │  No direct pushes to master or dev — changes arrive only via Pull Request.
   │  All CI checks must be green before merge is allowed.
   │
-  │  Release tags are cut from main:
+  │  Releases:  bump version on dev  →  PR dev → master  →  push tag
   │
-  └──  main  ──► git tag v1.2.3  ──► release.yml  ──► GitHub Release
+  └──  master  ──► git push origin vX.Y.Z  ──► release.yml  ──► GitHub Release
 ```
 
 ### Golden Rules
 
-- **Never push directly to `main`.**  All changes enter via Pull Request.
+- **Never push directly to `master` or `dev`.**  All changes enter via Pull Request.
+- **Features go to `dev` first.**  Only `dev → master` PRs cut a release.
 - **One logical change per PR.**  Keep diffs reviewable.
 - **Pre-commit hooks are mandatory.**  They run locally before every commit and
   identically in CI — a hook failure locally means a CI failure remotely.
@@ -57,6 +67,7 @@ gates, and CI/CD pipeline used by this project.
 | Bug fix | `fix/<issue-number>-<short-description>` | `fix/14-histogram-bin-edge-error` |
 | Documentation | `docs/<issue-number>-<short-description>` | `docs/22-update-api-reference` |
 | Hotfix (critical) | `hotfix/<issue-number>-<short-description>` | `hotfix/31-cpk-division-by-zero` |
+| Version bump | `chore/bump-vX.Y.Z` | `chore/bump-v0.2.0` |
 
 Rules:
 - Use lowercase and hyphens only (no underscores, no slashes except the prefix).
@@ -202,7 +213,7 @@ pre-commit run mypy --all-files
  git push origin feature/<N>-<slug>
          │
          ▼
- Open Pull Request → main
+ Open Pull Request → dev
          │
          ▼  (CI pipeline triggers — see §7)
          │
@@ -213,7 +224,7 @@ pre-commit run mypy --all-files
  PR reviewed and approved
          │
          ▼
- Merge into main
+ Merge into dev
          │
          ▼
  Delete feature branch
@@ -223,26 +234,31 @@ pre-commit run mypy --all-files
 
 ## 7. CI Pipeline — Push & Pull Request
 
-**Trigger:** every `push` and `pull_request` targeting `main`.
+**Trigger:** every `push` and `pull_request` targeting `dev` or `master`.
 
 ```
-push / pull_request → main
+push / pull_request → dev or master
         │
-        ├─── Job: pre-commit  ─────────────────────────────────────────────────┐
-        │         runs-on: ubuntu-latest                                        │
-        │         python: 3.12                                                  │
-        │         steps:                                                        │
-        │           pip install -e ".[dev]"   ← needed by system mypy hook     │
-        │           pip install pre-commit                                      │
-        │           pre-commit run --all-files                                  │
-        │                                                                       │
-        └─── Job: tox  (matrix: lint | test)  ────────────────────────────────┘
-                  runs-on: ubuntu-latest
-                  python: 3.12
-                  strategy.matrix.tox-env: [lint, test]
-                  steps:
-                    pip install tox
-                    tox -e ${{ matrix.tox-env }}
+        ├─── Workflow: CI (ci.yml)
+        │         ├── Job: pre-commit  ──────────────────────────────────────────┐
+        │         │         runs-on: ubuntu-latest                               │
+        │         │         python: 3.13                                         │
+        │         │         steps:                                               │
+        │         │           pip install -e ".[dev]"   ← needed by mypy hook   │
+        │         │           pip install pre-commit                             │
+        │         │           pre-commit run --all-files                         │
+        │         │                                                              │
+        │         └── Job: tox  (matrix: lint | test)  ──────────────────────── ┘
+        │                   runs-on: ubuntu-latest
+        │                   python: 3.13
+        │                   strategy.matrix.tox-env: [lint, test]
+        │                   steps:
+        │                     pip install tox
+        │                     tox -e ${{ matrix.tox-env }}
+        │
+        └─── Workflow: Docs (docs.yml)
+                  ├── Job: build   sphinx-build (all PR/push triggers)
+                  └── Job: deploy  gh-pages push (master push only)
 ```
 
 ### What Each Tox Environment Runs
@@ -265,8 +281,8 @@ pytest tests/ --cov=fabplot --cov-report=term-missing
 
 | Scenario | Result |
 |----------|--------|
-| All 3 jobs green | PR may be merged |
-| Any 1 job red | PR is blocked; push a fix commit to the same branch |
+| All jobs green | PR may be merged |
+| Any job red | PR is blocked; push a fix commit to the same branch |
 | Flaky test (passes on retry) | Investigate root cause; do not merge flaky code |
 
 ### Viewing CI Results
@@ -282,6 +298,15 @@ pytest tests/ --cov=fabplot --cov-report=term-missing
 
 **Trigger:** a `push` of a tag matching `v[0-9]+.[0-9]+.[0-9]+` (e.g. `v0.2.0`).
 
+### ⚠️ `master` is Protected — Follow This Order Exactly
+
+```
+WRONG ❌  git checkout master → bump → git push --follow-tags
+          → rejected: "Changes must be made through a pull request"
+
+CORRECT ✅  Bump on dev → PR dev→master → merge → push tag only
+```
+
 ### Semantic Version Rules
 
 | Change type | Bump | Before → After |
@@ -293,36 +318,57 @@ pytest tests/ --cov=fabplot --cov-report=term-missing
 ### Step-by-Step Release Procedure
 
 ```bash
-# 1. Ensure you are on main and the working tree is clean
-git checkout main && git pull
-git status               # must show "nothing to commit"
+# 1. Start from a clean dev branch
+git checkout dev && git pull
 
-# 2. Activate the virtual environment
+# 2. Activate the virtual environment (bump-my-version is in .venv)
 source .venv/bin/activate
 
 # 3. Preview the bump (nothing is written)
 bump-my-version bump minor --dry-run --verbose
 
-# 4. Apply the bump
+# 4. Apply the bump ON DEV
 bump-my-version bump minor
 #   Automatically:
 #     • Updates version = "..." in pyproject.toml
 #     • Updates __version__ = "..." in src/fabplot/__init__.py
-#     • Creates commit "Bump version: 0.1.0 → 0.2.0"  (--no-verify skips hooks)
-#     • Creates annotated tag v0.2.0
+#     • Creates commit "Bump version: 0.1.0 → 0.2.0"
+#     • Creates LOCAL annotated tag v0.2.0
 
-# 5. Push commit and tag in one command
-git push --follow-tags
+# 5. Push the bump commit to dev
+git push origin dev
+
+# 6. Open Pull Request: dev → master on GitHub
+#    Wait for CI to pass, then merge.
+
+# 7. After merge, pull master locally
+git checkout master && git pull
+
+# 8. Push the tag (this triggers release.yml)
+git push origin v0.2.0
+#    ↑ Push the tag name directly — do NOT use --follow-tags here
+#    (that would try to push to master too, which is blocked)
 ```
 
 > **Never edit version strings manually.**  Only `bump-my-version` keeps
 > `pyproject.toml` and `src/fabplot/__init__.py` in sync and creates the
 > required annotated tag.
 
+### Recovery: Accidentally Bumped on `master`
+
+```bash
+git checkout master
+git reset --hard origin/master   # discard local bump commit
+git tag -d vX.Y.Z                # delete local tag
+git checkout dev
+bump-my-version bump minor       # redo on dev
+git push origin dev              # then follow steps 6-8 above
+```
+
 ### What Happens on GitHub After Tag Push
 
 ```
-tag push v0.2.0
+git push origin v0.2.0
         │
         ├─── Job: ci  (lint + test guard) ────────────────────────────────────┐
         │         tox -e lint                                                   │
@@ -354,7 +400,7 @@ A hotfix addresses a critical defect in the production release **without**
 waiting for in-progress feature branches.
 
 ```
-main (currently at v0.2.0)
+master (currently at v0.2.0)
   │
   └── git checkout -b hotfix/31-cpk-division-by-zero
             │
@@ -371,14 +417,20 @@ main (currently at v0.2.0)
         git push origin hotfix/31-cpk-division-by-zero
             │
             ▼
-        Open PR → main
+        Open PR → master  (hotfixes skip dev and go straight to master)
             │  CI passes
             ▼
-        Merge → main
+        Merge → master
             │
             ▼
-        bump-my-version bump patch  →  v0.2.1
-        git push --follow-tags       →  release pipeline
+        git checkout dev && git pull master  ← backport to dev
+            │
+            ▼
+        git checkout dev
+        bump-my-version bump patch  →  v0.2.1   (on dev)
+        git push origin dev
+        Open PR: dev → master (or push tag directly if repo admin)
+        git push origin v0.2.1    →  release pipeline
 ```
 
 Hotfix branches are deleted after the PR merges, just like feature branches.
