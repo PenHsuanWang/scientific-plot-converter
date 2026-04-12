@@ -1,87 +1,265 @@
-"""Matplotlib rendering engine enforcing the CERN-style scientific layout."""
+"""Matplotlib rendering engine enforcing the scientific layout standard.
+
+Implements the ``FabStyleContext`` value object and ``CanvasBuilder`` class
+that together enforce the three-tier typography hierarchy, golden margin
+layout, four-sided mirror ticks, and the Petroff-compliant color palette
+across all FabPlot output.
+"""
 
 from contextlib import contextmanager
-from typing import Generator
+from dataclasses import dataclass
+from typing import Final, Generator
 
 import matplotlib as mpl
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+from cycler import cycler as make_cycler
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-FAB_STYLE = {
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-    "font.size": 10,
-    "axes.titlesize": 12,
-    "axes.labelsize": 10,
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
-    "legend.fontsize": 10,
-    "figure.titlesize": 12,
-    "savefig.format": "pdf",
-    "pdf.fonttype": 42,  # TrueType vector fonts
-    "svg.fonttype": "none",
-    "axes.linewidth": 1.2,
-    "lines.linewidth": 1.5,
-    "grid.alpha": 0.5,
-    "grid.linestyle": "--",
-}
 
+@dataclass(frozen=True)
+class FabStyleContext:
+    """Immutable value object holding all FabPlot styling constants.
 
-def setup_scientific_style() -> None:
-    """Apply global CERN-Style matplotlib settings.
-
-    Locks typography to 10pt/12pt Arial/Helvetica and ensures
-    vector-safe output parameters.
+    All fields are frozen at class definition. Changing any constant
+    requires a versioned library release — runtime mutation is prohibited
+    by the ``frozen=True`` constraint.
     """
-    mpl.rcParams.update(FAB_STYLE)
 
+    # ── Typography ────────────────────────────────────────────────────────
+    font_family: tuple[str, ...] = ("Arial", "Helvetica", "DejaVu Sans")
+    base_font_size: float = 10.0
+    title_font_size: float = 12.0
+    # Three-tier annotation base (Tier-1 uses this size as 1.0×)
+    annotation_font_size: float = 11.0
 
-@contextmanager
-def plot_context(
-    figsize: tuple[float, float] = (8, 6),
-) -> Generator[tuple[Figure, Axes], None, None]:
-    """Create a figure and axes with scientific style enforced.
+    # Three-tier size ratios (locked — do not override)
+    tier1_size_ratio: float = 1.00   # Bold  — brand / project tag
+    tier2_size_ratio: float = 0.77   # Italic — status tag (75–80 %)
+    tier3_size_ratio: float = 0.60   # Regular — context info
 
-    :param figsize: Width and height of the figure in inches.
-    :type figsize: tuple[float, float]
-    :returns: A ``(Figure, Axes)`` tuple for plot construction.
-    :rtype: tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]
-    """
-    setup_scientific_style()
-    fig, ax = plt.subplots(figsize=figsize)
-    try:
-        yield fig, ax
-    finally:
-        plt.close(fig)
+    # ── Golden margins (fraction of figure size) ──────────────────────────
+    margin_left: float = 0.15
+    margin_right: float = 0.05   # right plot edge at 1 − 0.05 = 0.95
+    margin_top: float = 0.09     # top plot edge at  1 − 0.09 = 0.91
+    margin_bottom: float = 0.12
 
-
-def add_fab_header(
-    ax: Axes, metadata: dict[str, str], status: str = "INTERNAL ONLY"
-) -> None:
-    """Add the Top-Left Status and Top-Right Metadata blocks to the axes.
-
-    :param ax: The matplotlib Axes instance to annotate.
-    :type ax: matplotlib.axes.Axes
-    :param metadata: Key-value pairs rendered as the top-right header.
-    :type metadata: dict[str, str]
-    :param status: Status label placed in the top-left corner.
-    :type status: str
-    """
-    ax.text(
-        0.01, 1.02, status, transform=ax.transAxes,
-        fontsize=10, fontweight="bold", va="bottom", ha="left",
+    # ── Petroff-compliant color palette ───────────────────────────────────
+    petroff_palette: tuple[str, ...] = (
+        "#3f90da",  # dark blue  (primary)
+        "#ffa90e",  # orange
+        "#bd1f01",  # dark red
+        "#94a4a2",  # gray
+        "#832db6",  # purple
+        "#a96b59",  # brown
+        "#e76300",  # dark orange
+        "#b9ac70",  # tan
+        "#717581",  # dark gray
+        "#92dadd",  # light blue
     )
-    if metadata:
-        meta_str = " | ".join(f"{k}: {v}" for k, v in metadata.items())
-        ax.text(
-            0.99, 1.02, meta_str, transform=ax.transAxes,
-            fontsize=9, va="bottom", ha="right", color="dimgray",
+
+    # ── Axis styling ──────────────────────────────────────────────────────
+    tick_direction: str = "in"
+    axis_label_pad: float = 12.0   # ≈ 1.2–1.5× font height in points
+
+
+#: Module-level singleton — the one authoritative style instance.
+FAB_STYLE_CONTEXT: Final[FabStyleContext] = FabStyleContext()
+
+
+class CanvasBuilder:
+    """Applies ``FabStyleContext`` rules to Matplotlib figures.
+
+    Responsible for:
+
+    * Activating the Petroff color cycle and locked typography via
+      ``rcParams``.
+    * Applying the golden margin ratios via ``fig.subplots_adjust``.
+    * Configuring four-sided, inward mirror ticks and axis label padding.
+    * Rendering the three-tier typography annotation layer.
+    * Providing context managers for single-panel and 7:3 composite
+      figure layouts.
+    """
+
+    def __init__(self, style: FabStyleContext = FAB_STYLE_CONTEXT) -> None:
+        """Initialise the builder with the given style context."""
+        self._style = style
+
+    # ── Private helpers ───────────────────────────────────────────────────
+
+    def _apply_global_style(self) -> None:
+        """Push locked rcParams: Petroff cycle, fonts, vector output."""
+        s = self._style
+        mpl.rcParams.update({
+            "font.family": "sans-serif",
+            "font.sans-serif": list(s.font_family),
+            "font.size": s.base_font_size,
+            "axes.titlesize": s.title_font_size,
+            "axes.labelsize": s.base_font_size,
+            "xtick.labelsize": s.base_font_size,
+            "ytick.labelsize": s.base_font_size,
+            "legend.fontsize": s.base_font_size,
+            "figure.titlesize": s.title_font_size,
+            "axes.prop_cycle": make_cycler(color=list(s.petroff_palette)),
+            "axes.linewidth": 1.2,
+            "lines.linewidth": 1.5,
+            "grid.alpha": 0.4,
+            "grid.linestyle": "--",
+            "savefig.format": "pdf",
+            "pdf.fonttype": 42,    # TrueType — vector-safe
+            "svg.fonttype": "none",
+            "legend.frameon": False,
+        })
+
+    def _apply_margins(self, fig: Figure, hspace: float = 0.0) -> None:
+        """Set golden margin ratios on the figure via ``subplots_adjust``."""
+        s = self._style
+        fig.subplots_adjust(
+            left=s.margin_left,
+            right=1.0 - s.margin_right,
+            bottom=s.margin_bottom,
+            top=1.0 - s.margin_top,
+            hspace=hspace,
         )
+
+    def _apply_axis_styling(self, ax: Axes) -> None:
+        """Enable four-sided inward mirror ticks and pad axis titles."""
+        s = self._style
+        ax.tick_params(
+            which="both",
+            direction=s.tick_direction,
+            top=True, right=True, bottom=True, left=True,
+        )
+        ax.xaxis.labelpad = s.axis_label_pad
+        ax.yaxis.labelpad = s.axis_label_pad
+
+    # ── Public API ────────────────────────────────────────────────────────
+
+    def add_three_tier_typography(
+        self,
+        fig: Figure,
+        project: str | None = None,
+        status: str | None = None,
+        context: str | None = None,
+    ) -> None:
+        """Render the three-tier annotation layer in the reserved top margin.
+
+        * **Tier 1** (Bold, top-left): brand / project identifier.
+        * **Tier 2** (Italic, ~77 % size, same line): data status tag.
+        * **Tier 3** (Regular, ~60 % size, top-right): context metadata.
+
+        :param fig: The figure to annotate.
+        :param project: Tier-1 brand or project name.
+        :param status: Tier-2 status label (e.g. ``"Internal Use Only"``).
+        :param context: Tier-3 context string (e.g. ``"2024-Q3 | N=1000"``).
+        """
+        s = self._style
+        tier1_fs = s.annotation_font_size * s.tier1_size_ratio
+        tier2_fs = s.annotation_font_size * s.tier2_size_ratio
+        tier3_fs = s.annotation_font_size * s.tier3_size_ratio
+
+        # Vertical centre of the reserved top margin in figure coordinates
+        y_mid = 1.0 - s.margin_top / 2.0
+        x_left = s.margin_left
+        x_right = 1.0 - s.margin_right
+
+        if project:
+            t1 = fig.text(
+                x_left, y_mid, project,
+                fontsize=tier1_fs, fontweight="bold",
+                ha="left", va="center",
+            )
+            if status:
+                # Draw to resolve font metrics, then measure Tier-1 right edge
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()  # type: ignore[attr-defined]
+                bb = t1.get_window_extent(renderer=renderer)
+                bb_fig = bb.transformed(fig.transFigure.inverted())
+                fig.text(
+                    bb_fig.x1 + 0.008, y_mid, status,
+                    fontsize=tier2_fs, fontstyle="italic",
+                    ha="left", va="center", color="dimgray",
+                )
+
+        if context:
+            fig.text(
+                x_right, y_mid, context,
+                fontsize=tier3_fs, fontweight="normal",
+                ha="right", va="center", color="dimgray",
+            )
+
+    @contextmanager
+    def single_canvas(
+        self,
+        figsize: tuple[float, float] = (8, 6),
+        project: str | None = None,
+        status: str | None = None,
+        context: str | None = None,
+    ) -> Generator[tuple[Figure, Axes], None, None]:
+        """Yield a single-panel figure with golden margins and mirror ticks.
+
+        :param figsize: Figure width and height in inches.
+        :param project: Tier-1 brand / project tag.
+        :param status: Tier-2 status label.
+        :param context: Tier-3 context string.
+        :yields: ``(Figure, Axes)`` ready for plot construction.
+        """
+        self._apply_global_style()
+        fig, ax = plt.subplots(figsize=figsize)
+        self._apply_margins(fig)
+        self._apply_axis_styling(ax)
+        try:
+            yield fig, ax
+        finally:
+            self.add_three_tier_typography(fig, project, status, context)
+            plt.close(fig)
+
+    @contextmanager
+    def composite_canvas(
+        self,
+        figsize: tuple[float, float] = (8, 9),
+        project: str | None = None,
+        status: str | None = None,
+        context: str | None = None,
+    ) -> Generator[tuple[Figure, Axes, Axes], None, None]:
+        """Yield a 7:3 two-panel composite figure with a shared X-axis.
+
+        The upper axes occupies 70 % of the plot area height; the lower
+        axes occupies the remaining 30 %.  The shared X-axis ensures
+        pixel-perfect horizontal alignment.  Upper panel X-tick labels
+        are hidden so the two panels appear visually fused.
+
+        :param figsize: Figure width and height in inches.
+        :param project: Tier-1 brand / project tag.
+        :param status: Tier-2 status label.
+        :param context: Tier-3 context string.
+        :yields: ``(Figure, ax_main, ax_ratio)`` ready for plot construction.
+        """
+        self._apply_global_style()
+        fig = plt.figure(figsize=figsize)
+        gs = gridspec.GridSpec(
+            2, 1, height_ratios=[7, 3], hspace=0, figure=fig
+        )
+        ax_main = fig.add_subplot(gs[0])
+        ax_ratio = fig.add_subplot(gs[1], sharex=ax_main)
+
+        self._apply_margins(fig, hspace=0.0)
+        self._apply_axis_styling(ax_main)
+        self._apply_axis_styling(ax_ratio)
+
+        # Fuse panels: hide upper X-tick labels, keep tick lines
+        ax_main.tick_params(labelbottom=False)
+
+        try:
+            yield fig, ax_main, ax_ratio
+        finally:
+            self.add_three_tier_typography(fig, project, status, context)
+            plt.close(fig)
 
 
 def add_stats_legend(ax: Axes, stats: dict[str, float]) -> None:
-    """Add a non-obtrusive stats legend box (N, μ, σ, Cpk) to the axes.
+    """Add a frameless stats legend box (N, μ, σ, Cpk) to the axes.
 
     :param ax: The matplotlib Axes instance to annotate.
     :type ax: matplotlib.axes.Axes
@@ -99,6 +277,6 @@ def add_stats_legend(ax: Axes, stats: dict[str, float]) -> None:
 
     props = dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="gray")
     ax.text(
-        0.95, 0.95, textstr, transform=ax.transAxes, fontsize=10,
+        0.97, 0.97, textstr, transform=ax.transAxes, fontsize=9,
         verticalalignment="top", horizontalalignment="right", bbox=props,
     )

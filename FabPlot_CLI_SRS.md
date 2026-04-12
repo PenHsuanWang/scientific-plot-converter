@@ -39,6 +39,74 @@
     - **Then** the axes, legends, and titles are locked to a 10pt/12pt Arial/Helvetica font.
 - **Business Rules:** Default color scales must avoid "rainbow" palettes and prioritize high-contrast, accessible textures (like hatching).
 
+#### USER STORY-2.2: Three-Tier Typography Hierarchy
+- **User Story:** As a Product Manager, I want every generated plot to automatically display a three-tier text hierarchy so that all charts carry consistent brand identity, data maturity status, and contextual metadata without any manual annotation.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Tier-1 Brand/Project Tag rendered (Bold, top-left)
+    - **Given** a project name is supplied via CLI flag `--project` or YAML recipe
+    - **When** any plot is generated
+    - **Then** the project/company identifier is rendered **bold** in the top-left corner of the canvas (inside or outside the plot frame).
+  - **Scenario 2:** Tier-2 Status Tag rendered (Italic, 75-80% size, after Tier-1)
+    - **Given** a status label is supplied via CLI flag `--status` (e.g., `"Internal Use Only"`, `"Preliminary"`, `"Draft"`, `"Simulation"`)
+    - **When** the plot is rendered
+    - **Then** the status label appears in *italic* immediately after the Tier-1 tag, at 75–80% of the Tier-1 font size.
+  - **Scenario 3:** Tier-3 Context Info rendered (Regular, ~60% size, top-right)
+    - **Given** context metadata is supplied via CLI flags `--context` (e.g., `"2024-Q3 | N=1000"`, `"Source: Fab-A"`)
+    - **When** the plot is rendered
+    - **Then** the context string appears in regular weight at the top-right corner (outside the plot frame), at approximately 60% of the Tier-1 font size.
+  - **Scenario 4:** Missing optional metadata
+    - **Given** only `--project` is supplied and `--status` / `--context` are omitted
+    - **When** the plot is rendered
+    - **Then** Tier-2 and Tier-3 zones are left empty without visual artifacts or layout shift.
+- **Business Rules:** All three tiers use the same sans-serif font family (Helvetica / Arial / Noto Sans). Tier sizing ratios are locked: Tier-1 = 1.0x base, Tier-2 = 0.75–0.80x, Tier-3 = 0.60x. These ratios cannot be overridden by user input.
+
+#### USER STORY-2.3: Golden Margin Canvas Layout
+- **User Story:** As a Data Science Researcher, I want the plot engine to automatically apply precise margin ratios so that every chart has professional visual breathing room, Y-axis numbers never clip the frame, and the top margin is reserved for metadata tags.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Correct margins applied to every plot
+    - **Given** any plot type is generated (hist1d, trend, or compare)
+    - **When** the canvas is initialized
+    - **Then** the figure margins are locked to: Left = 15%, Bottom = 12%, Top = 8–10%, Right = 5% of the total canvas size.
+  - **Scenario 2:** Top margin reserved exclusively for Tier-3 context metadata
+    - **Given** a plot with the top margin applied
+    - **When** the Tier-3 context string is rendered
+    - **Then** it is positioned entirely within the top margin area and does not overlap the plot frame.
+- **Business Rules:** Margin ratios are zero-config and cannot be modified by the user. This guarantees layout consistency across all output files regardless of canvas size.
+
+#### USER STORY-2.4: Mirror Ticks & Axis Title Offset
+- **User Story:** As a Process Integration Engineer, I want all four sides of the plot frame to have inward-pointing tick marks, and axis titles to be offset at a precise distance from the tick labels, so that any value on the chart can be read accurately from any edge.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Four-sided mirror ticks
+    - **Given** any plot is generated
+    - **When** the axes are rendered
+    - **Then** tick marks appear on all four sides of the plot frame (top, bottom, left, right), and all ticks point **inward** toward the data area.
+  - **Scenario 2:** Axis title offset
+    - **Given** an axis with tick labels and a title
+    - **When** the axis is rendered
+    - **Then** the axis title is centered along the axis and is offset from the tick labels by 1.2–1.5 times the axis title font height, ensuring no overlapping.
+  - **Scenario 3:** Axis unit format
+    - **Given** an axis label is defined (e.g., `Revenue`)
+    - **When** the unit is provided (e.g., `M USD`)
+    - **Then** the label is rendered as `Revenue [M USD]` using square-bracket unit notation.
+- **Business Rules:** Mirror tick application is automatic and zero-config. Top/right ticks display tick lines only, with no duplicate numeric labels.
+
+#### USER STORY-2.5: Petroff-Compliant Color Palette
+- **User Story:** As a Data Science Researcher, I want FabPlot to use a Petroff-principles color palette so that all plots remain legible in both color and grayscale print, and are accessible to colorblind readers.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Default palette applied to all series
+    - **Given** a plot with multiple data series or categories
+    - **When** the plot is rendered
+    - **Then** colors are drawn from the locked Petroff-inspired palette: dark blue, orange, dark red, gray (and extended variants), in that priority order.
+  - **Scenario 2:** No red-green contrast used
+    - **Given** any plot with two or more data series
+    - **When** the plot is rendered
+    - **Then** no adjacent series use a pure red vs. pure green contrast combination.
+  - **Scenario 3:** Grayscale distinguishability
+    - **Given** the output PDF is converted to grayscale
+    - **When** the chart is inspected
+    - **Then** all data series remain visually distinct through differing luminance levels.
+- **Business Rules:** The Petroff palette is the sole default palette and cannot be substituted via CLI flags. Software-default high-saturation palettes (e.g., Matplotlib tab10) are strictly prohibited.
+
 ### EPIC-3: Standard Plot Types (Phase 1)
 **Description:** Implement the primary visualization types required for daily semiconductor analysis: Distribution Analysis (hist1d) and Time/Lot-Series (trend).
 
@@ -80,6 +148,37 @@
     - **Then** a non-obtrusive Legend Box automatically calculates and displays Sample Size (N), Mean (μ), Sigma (σ), and Cpk on the canvas.
 - **Business Rules:** Annotations for Status (e.g., INTERNAL ONLY, DRAFT) must always be placed in the Top-Left corner.
 
+### EPIC-6: Composite Chart Architecture (7:3 Split Layout)
+**Description:** Provide a dedicated `fabplot compare` subcommand that renders a two-panel composite figure — a main data panel (70% height) stacked above a ratio/residual panel (30% height) — enabling direct visual comparison of data vs. prediction or period-over-period change.
+
+#### USER STORY-6.1: `fabplot compare` Subcommand
+- **User Story:** As a Yield Enhancement Engineer, I want to run `fabplot compare` with two data series so that I can see the primary distributions alongside their residuals or ratio in a single, publication-ready figure without any manual layout work.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Two-panel composite figure generated
+    - **Given** the `fabplot compare` command with valid `--x [column]`, `--y1 [series_a]`, and `--y2 [series_b]` flags
+    - **When** the command is executed
+    - **Then** a composite figure is generated with the main panel occupying 70% of the canvas height and the ratio/residual panel occupying the remaining 30%.
+  - **Scenario 2:** X-axes are pixel-perfect aligned
+    - **Given** a composite figure is rendered
+    - **When** the output file is inspected
+    - **Then** the X-axis data range and tick positions are identical across both panels, with no horizontal offset between the upper and lower frames.
+  - **Scenario 3:** Upper panel X-axis tick labels are hidden
+    - **Given** a composite figure is rendered
+    - **When** the upper panel is inspected
+    - **Then** the X-axis tick **lines** are present (preserving frame structure) but the numeric/text **labels** are hidden, so the two panels appear visually fused.
+  - **Scenario 4:** Lower panel Y-axis label describes the derived metric
+    - **Given** the `--ratio-label` flag is optionally supplied (e.g., `"Data / MC"` or `"Residual [σ]"`)
+    - **When** the plot is rendered
+    - **Then** the lower panel Y-axis uses that label; if omitted, it defaults to `"Ratio"`.
+  - **Scenario 5:** Missing second series
+    - **Given** only `--y1` is provided and `--y2` is omitted
+    - **When** the command is executed
+    - **Then** the CLI exits with a clear error message: `"fabplot compare requires both --y1 and --y2 arguments."` and no file is created.
+- **Business Rules:**
+  - The 70/30 height split is locked and zero-config; it cannot be adjusted via CLI flags.
+  - All three-tier typography, golden margins, mirror ticks, and Petroff palette rules from EPIC-2 apply automatically to both panels.
+  - The lower panel ratio/residual is computed as `y1 / y2`; the caller is responsible for ensuring the series are comparable.
+
 ### EPIC-5: Templates & Configuration
 **Description:** Allow users to save and reuse common configurations via YAML recipes.
 
@@ -99,6 +198,8 @@ These define how the system must behave, beyond its specific features.
 - **Performance:** Ingesting and processing large Fab CSV/Parquet files must be rapid and memory-efficient, leveraging the `Polars` data engine. Generating a plot should ideally take less than a few seconds.
 - **Maintainability:** The codebase must follow standard Python best practices (e.g., PEP 8 style, strict typing) to allow for easy extensibility by internal data science teams.
 - **Output Quality:** The visualization engine (`Matplotlib` + `Proplot`) must strictly output in vector formats to guarantee statistical legibility and "Scientific Authority."
+- **Style Integrity:** All `FabStyleContext` styling constants (golden margins, three-tier font ratios, Petroff palette, mirror-tick settings) must be immutable at runtime. Any modification to these defaults requires a versioned release and a changelog entry.
+- **Accessibility:** The Petroff palette must ensure a minimum luminance contrast ratio of 3:1 between adjacent data series in grayscale, supporting legibility for colorblind users (deuteranopia, protanopia) and monochrome print.
 
 ## 4. Glossary & Definitions
 - **Fab:** Semiconductor fabrication plant.
@@ -107,3 +208,9 @@ These define how the system must behave, beyond its specific features.
 - **CERN Style:** A rigorous, highly structured style of data visualization common in particle physics, prioritizing statistical clarity, metadata, and scientific authority over decorative aesthetics.
 - **Cpk:** Process Capability Index, a statistical measure of a process's ability to produce output within specification limits.
 - **UCL / LCL:** Upper Control Limit / Lower Control Limit, used in statistical process control.
+- **Three-Tier Typography:** The visual text hierarchy enforced on every FabPlot canvas: Tier-1 (Bold brand/project tag, top-left), Tier-2 (Italic status tag at 0.75–0.80x, adjacent to Tier-1), Tier-3 (Regular context info at 0.60x, top-right outside frame).
+- **Golden Margin:** The locked canvas margin ratios (L: 15%, B: 12%, T: 8–10%, R: 5%) derived from high-energy physics visualization standards to guarantee visual breathing room across all plot types.
+- **Mirror Ticks:** Tick marks rendered on all four sides of a plot frame, pointing inward toward the data area, enabling precise value alignment from any edge of the chart.
+- **Petroff Palette:** A colorblind-accessible, grayscale-distinguishable color set based on Petroff principles, using dark blue, orange, dark red, and gray as primary colors. Replaces high-saturation software defaults.
+- **Composite Chart (7:3 Split):** A two-panel layout where the main data panel occupies 70% of the canvas height and a ratio/residual panel occupies the lower 30%, with a shared, pixel-aligned X-axis.
+- **Residual / Ratio Panel:** The lower panel in a composite chart displaying derived metrics such as `Data / Prediction`, `Residuals [σ]`, or period-over-period change rate.
