@@ -1,8 +1,8 @@
-FabPlot-CLI Documentation
+dsprinter Documentation
 =========================
 
 A standardized Python CLI utility for generating publication-quality,
-"Scientific-Grade" semiconductor visualizations from CSV/Parquet data.
+"Scientific-Grade" general-purpose visualizations from CSV/Parquet data.
 
 .. toctree::
    :maxdepth: 2

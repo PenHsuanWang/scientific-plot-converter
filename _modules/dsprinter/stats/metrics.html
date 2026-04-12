@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>fabplot.stats.metrics &#8212; FabPlot-CLI 0.1.0 documentation</title>
+    <title>dsprinter.stats.metrics &#8212; dsprinter 0.1.0 documentation</title>
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
     <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
@@ -30,14 +30,14 @@
 
           <div class="body" role="main">
             
-  <h1>Source code for fabplot.stats.metrics</h1><div class="highlight"><pre>
+  <h1>Source code for dsprinter.stats.metrics</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Statistical metrics for semiconductor process analysis.&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 
 <div class="viewcode-block" id="calculate_metrics">
-<a class="viewcode-back" href="../../../api/stats.html#fabplot.stats.metrics.calculate_metrics">[docs]</a>
+<a class="viewcode-back" href="../../../api/stats.html#dsprinter.stats.metrics.calculate_metrics">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">calculate_metrics</span><span class="p">(</span>
     <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">lsl</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -76,7 +76,7 @@
 
 
 <div class="viewcode-block" id="calculate_smart_bins">
-<a class="viewcode-back" href="../../../api/stats.html#fabplot.stats.metrics.calculate_smart_bins">[docs]</a>
+<a class="viewcode-back" href="../../../api/stats.html#dsprinter.stats.metrics.calculate_smart_bins">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">calculate_smart_bins</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate the optimal number of histogram bins for semiconductor data.</span>
 
@@ -113,7 +113,7 @@
 
 
 <div class="viewcode-block" id="calculate_ratio">
-<a class="viewcode-back" href="../../../api/stats.html#fabplot.stats.metrics.calculate_ratio">[docs]</a>
+<a class="viewcode-back" href="../../../api/stats.html#dsprinter.stats.metrics.calculate_ratio">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">calculate_ratio</span><span class="p">(</span>
     <span class="n">y1</span><span class="p">:</span> <span class="s2">&quot;np.ndarray&quot;</span><span class="p">,</span>
     <span class="n">y2</span><span class="p">:</span> <span class="s2">&quot;np.ndarray&quot;</span><span class="p">,</span>
@@ -142,7 +142,7 @@
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="Main">
         <div class="sphinxsidebarwrapper">
-<h1 class="logo"><a href="../../../index.html">FabPlot-CLI</a></h1>
+<h1 class="logo"><a href="../../../index.html">dsprinter</a></h1>
 
 
 

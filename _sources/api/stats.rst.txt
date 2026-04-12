@@ -1,7 +1,7 @@
 Statistics & Metrics
 =====================
 
-.. automodule:: fabplot.stats.metrics
+.. automodule:: dsprinter.stats.metrics
    :members:
    :undoc-members:
    :show-inheritance:

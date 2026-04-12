@@ -1,7 +1,7 @@
 CLI Entry Points
 ================
 
-.. automodule:: fabplot.cli
+.. automodule:: dsprinter.cli
    :members:
    :undoc-members:
    :show-inheritance:
