@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0          # full history so tox can inspect tags
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Install tox
         run: pip install tox
       - name: Lint
@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Install build
         run: pip install build
       - name: Build sdist and wheel

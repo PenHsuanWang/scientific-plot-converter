@@ -1,8 +1,5 @@
 exclude: '^src/.*\.egg-info/'
 
-default_language_version:
-  python: python3.13
-
 repos:
   # ── Basic file hygiene ────────────────────────────────────────────────────
   - repo: https://github.com/pre-commit/pre-commit-hooks
