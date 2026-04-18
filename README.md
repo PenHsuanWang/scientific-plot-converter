@@ -15,6 +15,7 @@ A standardized Python Command-Line Interface (CLI) utility designed to generate 
   - **hist1d:** Distribution Analysis with smart binning (Freedman-Diaconis rule) and optional Yield Density (PDF) normalization.
   - **trend:** Time-Series or Lot-Series analysis with automatic Control Limits (UCL/LCL at $\pm 3\sigma$) rendered as subtle shaded regions.
   - **compare:** 7:3 composite layout — primary data panel (70%) stacked above a ratio/residual panel (30%), with fused X-axes for direct alignment.
+  - **gantt:** Multi-Channel Categorical State chart — vertically stacked panels, one per entity, sharing a single time axis. Automatically switches from exact-interval bars to density-aggregated proportional bars when state spans would be too narrow to render faithfully. Supports global event overlays (point and duration) and domain-specific color palettes.
 
 ## Prerequisites
 
@@ -134,9 +135,110 @@ dp compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
   --context "2025-Q1 · N=480" --output cd_ratio_annotated.pdf
 ```
 
----
+### 4. Multi-Channel Categorical State Gantt (`gantt`)
 
-## Development
+#### What this chart shows and why it matters
+
+The `gantt` command renders a **faceted Gantt chart** — a row of horizontally stacked panels, one per entity (channel), all locked to the exact same time axis. Each colored bar represents a period during which an entity was in a particular categorical state.
+
+This is the right chart when your questions are:
+
+- *"Were Server A and Server B in a degraded state at the same time?"*
+- *"Did a deployment event trigger an error state across multiple pipelines simultaneously?"*
+- *"What fraction of last quarter did Machine #3 spend idle vs. running vs. in maintenance?"*
+
+It differs from a standard Gantt task chart in two key ways:
+
+1. **States, not tasks.** Bars represent observed categorical conditions (e.g., `idle / running / error`), not planned work packages. The chart is driven by measurement data, not project plans.
+2. **Zero-config density adaptation.** Over long timeframes (e.g., a full year at day resolution), sub-pixel state spans would vanish and mislead. The chart automatically detects this condition and switches to **Aggregation Mode** — bucketing time into hourly or daily bins and rendering each bucket as a stacked proportional bar showing the percentage of time spent in each state. This switch is invisible to the user; you always get a faithful, readable chart.
+
+#### Input data format
+
+The `gantt` command expects a **state-log CSV** — one row per state-entry event:
+
+| `channel` | `timestamp` | `state` |
+|---|---|---|
+| `server-a` | `2024-06-01T08:00:00` | `running` |
+| `server-a` | `2024-06-01T14:32:10` | `degraded` |
+| `server-b` | `2024-06-01T08:00:00` | `running` |
+| `server-b` | `2024-06-01T11:45:00` | `idle` |
+| … | … | … |
+
+- Each row records the moment an entity **entered** a new state.
+- The end time of each state span is inferred as the start time of the next row for that channel.
+- The final state per channel is extended by `max(1 s, 1 % of total span)` to keep it visible.
+- Column names default to `channel`, `timestamp`, `state` and can be overridden with `--channel-col`, `--time-col`, `--state-col`.
+- Timestamps may be any ISO-8601 string; timezone info is stripped automatically.
+
+#### Global event overlays
+
+Pass a JSON file with `--events` to overlay system-wide markers across all panels:
+
+```json
+[
+  { "type": "point",    "timestamp": "2024-06-15T02:00:00", "label": "Deploy v3.2" },
+  { "type": "duration", "start":     "2024-06-20T00:00:00",
+                        "end":       "2024-06-21T00:00:00", "label": "Maintenance window" }
+]
+```
+
+- **`point`** → dashed vertical line spanning all panels (default color: `#bd1f01`).
+- **`duration`** → semi-transparent shaded band spanning all panels (default color: `#94a4a2`).
+
+Both types appear in the unified legend at the bottom of the chart.
+
+#### Domain-specific color palette
+
+Pass a JSON file with `--palette` to override the default Petroff colors for specific states. All colors must be `#RRGGBB` hex strings. A `UserWarning` is emitted (but rendering is never blocked) if adjacent colors fail the WCAG 2.1 3:1 grayscale contrast threshold.
+
+```json
+{
+  "running":   "#4caf50",
+  "idle":      "#2196f3",
+  "degraded":  "#ff9800",
+  "error":     "#f44336"
+}
+```
+
+#### CLI examples
+
+```bash
+# Minimal: two-column defaults (channel, timestamp, state)
+dp gantt --input server_states.csv
+
+# Custom column names
+dp gantt --input ops_log.csv \
+  --channel-col entity --time-col event_time --state-col condition
+
+# With event overlays and domain palette
+dp gantt --input server_states.csv \
+  --events deploys.json \
+  --palette domain_colors.json \
+  --output figure_out/server_gantt.pdf
+
+# Full three-tier annotation
+dp gantt --input server_states.csv \
+  --events deploys.json \
+  --palette domain_colors.json \
+  --project "Ops / Server Fleet" --status "Incident Review" \
+  --context "2024-06 · 8 nodes" \
+  --output june_review.svg
+```
+
+#### Per-panel statistics
+
+Each panel automatically computes and displays compact statistics in the right margin:
+
+```
+N=48
+running: 67%
+idle:    22%
+error:    9%
+```
+
+`N` is the total number of state-entry records for that channel. The top-3 states by time percentage are listed beneath it.
+
+---
 
 ### Project Structure
 
@@ -144,18 +246,21 @@ dp compare --input wafer_data.csv --x LotID --y1 Target_CD --y2 Measured_CD \
 scientific-plot-converter/
 ├── src/dsprinter/
 │   ├── __init__.py       # package version (__version__)
-│   ├── cli.py            # Typer entry points: hist1d, trend, compare (+ three-tier flags)
+│   ├── cli.py            # Typer entry points: hist1d, trend, compare, gantt (+ three-tier flags)
 │   ├── data/io.py        # Polars wrappers for high-speed ingestion and validation
-│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk, binning, calculate_ratio)
+│   ├── stats/metrics.py  # Statistical calculations (N, μ, σ, Cpk, binning, ratio,
+│   │                     #   state_distribution, compute_state_bins, validate_grayscale_contrast)
 │   └── render/
 │       ├── engine.py     # DSPStyleContext (frozen dataclass), CanvasBuilder (golden margins,
-│       │                 #   mirror ticks, Petroff palette, three-tier typography)
-│       └── plots.py      # render_hist1d, render_trend, render_compare (7:3 composite)
+│       │                 #   mirror ticks, Petroff palette, three-tier typography, gantt_canvas)
+│       ├── plots.py      # render_hist1d, render_trend, render_compare (7:3 composite)
+│       └── gantt.py      # render_gantt, ChannelData, PointEvent, DurationEvent,
+│                         #   DomainPalette, AggregationEngine
 ├── tests/
-│   ├── test_cli.py       # CLI integration tests (hist1d, trend, compare, routing)
+│   ├── test_cli.py       # CLI integration tests (hist1d, trend, compare, gantt, routing)
 │   ├── test_io.py        # Data loading and format tests
-│   ├── test_metrics.py   # Statistical calculation tests
-│   └── test_engine.py    # Canvas rendering and typography tests (99 tests total)
+│   ├── test_metrics.py   # Statistical calculation tests (incl. state metrics)
+│   └── test_engine.py    # Canvas rendering and typography tests (139 tests total)
 ├── docs/                 # Sphinx source; build with: sphinx-build -b html docs docs/_build/html
 │   ├── conf.py
 │   ├── index.rst
@@ -200,7 +305,7 @@ pre-commit install
 
 This installs a `.git/hooks/pre-commit` script that automatically runs all quality checks every time you run `git commit`.
 
-> **Note:** The `mypy` hook uses `language: system`, meaning it resolves imports from your active virtual environment. Always activate `.venv` before committing.
+> **Note:** The `mypy` hook uses `entry: .venv/bin/mypy` so it always resolves imports from the project virtual environment without requiring manual activation.
 
 ---
 
