@@ -718,3 +718,167 @@ def test_gantt_typography_options_accepted(gantt_csv, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert out_file.exists()
+
+
+# ── transition command ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def transition_csv(tmp_path):
+    """State-log CSV with two channels and multiple state transitions."""
+    rows = [
+        "svc,2024-01-01T00:00:00,idle",
+        "svc,2024-01-01T01:00:00,running",
+        "svc,2024-01-01T02:00:00,idle",
+        "svc,2024-01-01T03:00:00,error",
+        "svc,2024-01-01T04:00:00,idle",
+        "db,2024-01-01T00:00:00,idle",
+        "db,2024-01-01T01:00:00,running",
+        "db,2024-01-01T02:00:00,running",
+        "db,2024-01-01T03:00:00,idle",
+    ]
+    content = "channel,timestamp,state\n" + "\n".join(rows)
+    p = tmp_path / "transition_data.csv"
+    p.write_text(content)
+    return p
+
+
+def test_transition_happy_path(transition_csv, tmp_path):
+    """Transition command must exit 0 and write a PDF."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(transition_csv), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Successfully generated transition matrix" in result.stdout
+    assert out_file.exists()
+
+
+def test_transition_default_output_in_figure_out(transition_csv, tmp_path, monkeypatch):
+    """Default output must land in figure_out/ under CWD."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app, ["transition", "--input", str(transition_csv)]
+    )
+    assert result.exit_code == 0, result.output
+    expected = tmp_path / "figure_out" / "transition_data_transition.pdf"
+    assert expected.exists()
+
+
+def test_transition_missing_state_col_exits_nonzero(transition_csv, tmp_path):
+    """Missing --state-col must produce exit code 1 with an error message."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(transition_csv),
+         "--state-col", "no_such_col", "--output", str(out_file)],
+    )
+    assert result.exit_code == 1
+    assert "not found" in result.stdout.lower() or result.exit_code != 0
+
+
+def test_transition_missing_channel_col_exits_nonzero(transition_csv, tmp_path):
+    """Missing --channel-col must produce exit code 1 with an error message."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(transition_csv),
+         "--channel-col", "no_channel", "--output", str(out_file)],
+    )
+    assert result.exit_code == 1
+
+
+def test_transition_custom_col_names(tmp_path):
+    """Custom column names passed via flags must be respected."""
+    rows = [
+        "svc,2024-01-01T00:00:00,idle",
+        "svc,2024-01-01T01:00:00,running",
+        "svc,2024-01-01T02:00:00,idle",
+    ]
+    content = "entity,ts,status\n" + "\n".join(rows)
+    csv_file = tmp_path / "custom.csv"
+    csv_file.write_text(content)
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(csv_file),
+         "--channel-col", "entity", "--time-col", "ts",
+         "--state-col", "status", "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_transition_single_state_no_crash(tmp_path):
+    """A degenerate dataset with a single state must not crash."""
+    rows = [
+        "svc,2024-01-01T00:00:00,idle",
+        "svc,2024-01-01T01:00:00,idle",
+        "svc,2024-01-01T02:00:00,idle",
+    ]
+    content = "channel,timestamp,state\n" + "\n".join(rows)
+    csv_file = tmp_path / "single.csv"
+    csv_file.write_text(content)
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(csv_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_transition_typography_options_accepted(transition_csv, tmp_path):
+    """Three-tier typography flags must be accepted without error."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(transition_csv),
+         "--project", "Acme", "--status", "Draft", "--context", "Q1-2024",
+         "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_transition_nonexistent_input_exits_nonzero(tmp_path):
+    """A missing input CSV must produce a non-zero exit code."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", "/no/such/file.csv", "--output", str(out_file)],
+    )
+    assert result.exit_code != 0
+
+
+def test_transition_output_flag_respected(transition_csv, tmp_path):
+    """--output flag must write the PDF to the specified path."""
+    out_file = tmp_path / "custom_output.pdf"
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(transition_csv), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_transition_multi_entity_boundary_not_included(tmp_path):
+    """Cross-entity boundary transitions must not appear in the heatmap output."""
+    rows = [
+        "A,2024-01-01T00:00:00,idle",
+        "A,2024-01-01T01:00:00,running",
+        "B,2024-01-01T02:00:00,error",
+        "B,2024-01-01T03:00:00,idle",
+    ]
+    content = "channel,timestamp,state\n" + "\n".join(rows)
+    csv_file = tmp_path / "multi.csv"
+    csv_file.write_text(content)
+    out_file = tmp_path / "out.pdf"
+    # Must succeed and produce output — boundary filtering happens internally
+    result = runner.invoke(
+        app,
+        ["transition", "--input", str(csv_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()

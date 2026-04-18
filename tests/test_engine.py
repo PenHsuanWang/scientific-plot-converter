@@ -5,6 +5,7 @@ matplotlib.use("Agg")  # noqa: E402 — must be set before any other mpl import
 
 import matplotlib.pyplot as plt  # noqa: E402
 import pytest  # noqa: E402
+from matplotlib.axes import Axes  # noqa: E402
 
 from dsprinter.render.engine import (  # noqa: E402
     DSP_STYLE_CONTEXT,
@@ -440,4 +441,58 @@ def test_gantt_canvas_single_channel():
     builder = CanvasBuilder(DSPStyleContext())
     with builder.gantt_canvas(n_channels=1) as (fig, axes):
         assert len(axes) == 1
+        plt.close(fig)
+
+
+# ── transition_canvas ─────────────────────────────────────────────────────────
+
+
+def test_transition_canvas_yields_two_axes():
+    """transition_canvas must yield exactly two Axes instances."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.transition_canvas() as (fig, ax_count, ax_prob):
+        assert isinstance(ax_count, Axes)
+        assert isinstance(ax_prob, Axes)
+        assert ax_count is not ax_prob
+        plt.close(fig)
+
+
+def test_transition_canvas_default_figsize():
+    """Default figure width must be 14 inches."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.transition_canvas() as (fig, _, __):
+        assert fig.get_figwidth() == pytest.approx(14.0, rel=1e-3)
+        plt.close(fig)
+
+
+def test_transition_canvas_figure_closed_after_exit():
+    """Figure must be closed after the context manager exits."""
+    import matplotlib.pyplot as _plt
+
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.transition_canvas() as (fig, _, __):
+        fig_num = fig.number
+
+    assert fig_num not in [f.number for f in _plt.get_fignums()]
+
+
+def test_transition_canvas_golden_margins():
+    """Golden margin parameters must be applied to the figure."""
+    style = DSPStyleContext()
+    builder = CanvasBuilder(style)
+    with builder.transition_canvas() as (fig, _, __):
+        sp = fig.subplotpars
+        assert sp.left == pytest.approx(style.margin_left, rel=1e-4)
+        assert sp.right == pytest.approx(1.0 - style.margin_right, rel=1e-4)
+        assert sp.bottom == pytest.approx(style.margin_bottom, rel=1e-4)
+        assert sp.top == pytest.approx(1.0 - style.margin_top, rel=1e-4)
+        plt.close(fig)
+
+
+def test_transition_canvas_typography_applied():
+    """Three-tier typography must add figure-level text when args are supplied."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.transition_canvas(project="TestProject") as (fig, _, __):
+        # add_three_tier_typography calls fig.text() for Tier-1
+        assert len(fig.texts) > 0
         plt.close(fig)

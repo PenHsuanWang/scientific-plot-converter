@@ -22,6 +22,7 @@ from dsprinter.render.gantt import (
     render_gantt,
 )
 from dsprinter.render.plots import render_compare, render_hist1d, render_trend
+from dsprinter.render.transition import render_transition
 
 app = typer.Typer(
     help=(
@@ -499,6 +500,92 @@ def gantt(
         raise
     except Exception as e:
         typer.secho(f"Error generating Gantt chart: {e}", fg=typer.colors.RED)
+        sys.exit(1)
+
+
+@app.command()
+def transition(
+    input: str = typer.Option(
+        ...,
+        "--input",
+        "-i",
+        help="Input CSV/Parquet file with columns: channel, timestamp, state.",
+    ),
+    channel_col: str = typer.Option(
+        "channel",
+        "--channel-col",
+        help="Column name for the entity/channel identifier.",
+    ),
+    time_col: str = typer.Option(
+        "timestamp",
+        "--time-col",
+        help="Column name for the event timestamp (ISO-8601 or datetime).",
+    ),
+    state_col: str = typer.Option(
+        "state",
+        "--state-col",
+        help="Column name for the categorical state label.",
+    ),
+    project: Optional[str] = _PROJECT,
+    status: Optional[str] = _STATUS,
+    context: Optional[str] = _CONTEXT,
+    output: Optional[str] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output path (.pdf or .svg). Defaults to "
+             "figure_out/<input>_transition.pdf.",
+    ),
+) -> None:
+    """Generate a dual-panel state transition matrix heatmap.
+
+    Reads a state-log CSV (one row per state-entry event) and renders a
+    side-by-side heatmap: the left panel shows raw transition counts on a
+    logarithmic colour scale; the right panel shows row-normalised conditional
+    probabilities.  Self-transitions are highlighted with a bold cell border.
+    """
+    try:
+        df = load_data(input)
+        for col in [channel_col, time_col, state_col]:
+            if col not in df.columns:
+                typer.secho(
+                    f"Error: Column '{col}' not found in input data.",
+                    fg=typer.colors.RED,
+                )
+                raise typer.Exit(code=1)
+
+        # Parse timestamps if stored as strings; silently skip if already datetime
+        try:
+            df = df.with_columns(
+                pl.col(time_col).str.to_datetime(strict=False)
+            )
+        except Exception:
+            pass
+
+        out_path = _resolve_output(output, Path(input).stem, "transition")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        render_transition(
+            df,
+            channel_col=channel_col,
+            time_col=time_col,
+            state_col=state_col,
+            project=project,
+            status=status,
+            context=context,
+            output=out_path,
+        )
+        typer.secho(
+            f"Successfully generated transition matrix at {out_path}",
+            fg=typer.colors.GREEN,
+        )
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.secho(
+            f"Error generating transition matrix: {e}", fg=typer.colors.RED
+        )
         sys.exit(1)
 
 

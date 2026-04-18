@@ -400,6 +400,49 @@ class CanvasBuilder:
         finally:
             plt.close(fig)
 
+    @contextmanager
+    def transition_canvas(
+        self,
+        figsize: tuple[float, float] = (14.0, 7.0),
+        project: str | None = None,
+        status: str | None = None,
+        context: str | None = None,
+    ) -> Generator[tuple[Figure, Axes, Axes], None, None]:
+        """Yield a 1:1 dual-panel figure for the state transition matrix heatmap.
+
+        Builds two equal-width panels via ``GridSpec(1, 2, wspace=0.4)`` so each
+        heatmap panel has its own color bar without competing for horizontal space.
+        Golden margins, mirror ticks, and three-tier typography are applied
+        identically to all other canvas types.
+
+        :param figsize: Figure ``(width, height)`` in inches. Default 14 × 7 in.
+        :type figsize: tuple[float, float]
+        :param project: Tier-1 brand / project tag.
+        :type project: str or None
+        :param status: Tier-2 status label.
+        :type status: str or None
+        :param context: Tier-3 context string.
+        :type context: str or None
+        :yields: ``(Figure, ax_count, ax_prob)`` ready for heatmap rendering.
+        """
+        self._apply_global_style()
+        fig = plt.figure(figsize=figsize)
+        # wspace=0.4 gives breathing room for the color bar on each panel while
+        # _apply_margins controls the outer left/right/top/bottom boundaries.
+        gs = gridspec.GridSpec(1, 2, wspace=0.4, figure=fig)
+        ax_count: Axes = fig.add_subplot(gs[0])
+        ax_prob: Axes = fig.add_subplot(gs[1])
+
+        self._apply_margins(fig)
+        self._apply_axis_styling(ax_count)
+        self._apply_axis_styling(ax_prob)
+
+        self.add_three_tier_typography(fig, project, status, context)
+        try:
+            yield fig, ax_count, ax_prob
+        finally:
+            plt.close(fig)
+
 
 def add_stats_legend(ax: Axes, stats: dict[str, float]) -> None:
     """Add a frameless stats legend box (N, μ, σ, Cpk) to the axes.

@@ -318,6 +318,81 @@
     - **Then** the panel is rendered as an empty row with a centered "No Data" annotation; no error is raised.
 - **Business Rules:** Row-level statistics text uses 10 pt Regular weight, consistent with the stats box rule in US-2.6. Domain palette overrides are applied per-run only and must not mutate the global `DSPStyleContext`. The 3:1 grayscale contrast invariant is enforced at palette construction time with a clear warning; rendering is not blocked.
 
+### EPIC-8: Dual-Panel State Transition Matrix
+**Description:** Provide a specialized analytical heatmap that computes consecutive state-to-state transition frequencies from a chronological state log and presents both raw counts and row-normalized probabilities in a side-by-side dual-panel layout. This enables users to identify dominant transition workflows, detect anomalous state-switching loops, and assess conditional likelihood of future states at a glance.
+
+#### USER STORY-8.1: Dual-Panel Comparative Layout (Count vs. Probability)
+- **User Story:** As a Data Analyst, I want to see raw transition counts and row-normalized transition probabilities side-by-side in a single chart, so that I can evaluate both the absolute volume of a transition and its relative likelihood simultaneously.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Dual-panel generation from a valid state log
+    - **Given** a CSV dataset containing chronological categorical state records for one or more entities
+    - **When** `dp transition` is invoked
+    - **Then** the canvas is split horizontally into two equal-width panels (1:1 ratio).
+    - **And** the left panel is titled "TRANSITION COUNT" and displays the raw count heatmap.
+    - **And** the right panel is titled "TRANSITION PROBABILITY" and displays the row-normalized probability heatmap, where each row sums to 1.0.
+    - **And** both panels share identical state category labels on both X (Next State) and Y (Current State) axes with the same sort order.
+  - **Scenario 2:** Single-state dataset (degenerate case)
+    - **Given** all records contain the same categorical state
+    - **When** `dp transition` is invoked
+    - **Then** a 1×1 matrix is rendered correctly as a self-transition with count N and probability 1.0; no error is raised.
+  - **Scenario 3:** Missing required column
+    - **Given** the input CSV does not contain the column specified by `--state-col`
+    - **When** `dp transition` is invoked
+    - **Then** the CLI exits with a non-zero code and prints an actionable error message naming the missing column.
+- **Business Rules:** The dataset must be internally sorted by entity and then by timestamp before consecutive pairs are extracted, to guarantee transitions reflect temporal reality rather than row order.
+
+#### USER STORY-8.2: Logarithmic Color Scale & Independent Panel Palettes
+- **User Story:** As a Reliability Engineer, I want the count panel to use a logarithmic color scale and the two panels to use visually distinct color gradients, so that extremely rare transitions remain visible and I can instantly distinguish count data from probability data.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Log normalization applied to count panel
+    - **Given** transition count data spanning multiple orders of magnitude (e.g., from 1 to 1,000,000)
+    - **When** the left "Count" panel is rendered
+    - **Then** the color mapping applies `log(1 + count)` normalization (equivalent to `LogNorm(vmin=1)`) rather than a linear scale.
+    - **And** a color bar is appended to the left panel labeled with the log scale axis.
+  - **Scenario 2:** Independent palettes prevent cognitive cross-contamination
+    - **Given** the dual-panel layout is rendered
+    - **When** colors are applied
+    - **Then** the Count panel uses a warm sequential gradient (e.g., `YlOrRd`) and the Probability panel uses a cool sequential gradient (e.g., `Blues`).
+    - **And** the two gradients must be visually non-overlapping in hue to prevent ambiguity.
+  - **Scenario 3:** All-zero row (state never occurs as source)
+    - **Given** a state exists in the dataset as a destination but never as a source transition
+    - **When** the probability panel is rendered
+    - **Then** the corresponding row is filled with zero-probability values and rendered in the lowest gradient color; no division-by-zero error is raised.
+- **Business Rules:** Log normalization is always applied to the count panel regardless of data range; there is no user flag to override it. The minimum count value passed to `LogNorm` is clamped to 1 to avoid `log(0)` errors.
+
+#### USER STORY-8.3: Visual Highlighting of Self-Transitions (Diagonal Bounds)
+- **User Story:** As a System Architect, I want self-transitions (where the current state and next state are identical) to be visually distinguished from cross-category transitions, so that I can separate internal state persistence from meaningful phase changes at a glance.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Diagonal cell border applied on both panels
+    - **Given** the transition matrices are rendered
+    - **When** the grid is finalized
+    - **Then** a distinct visual border (bold solid black stroke, linewidth ≥ 2.5) is automatically drawn around every diagonal cell (where row index == column index) on **both** the Count and Probability panels.
+    - **And** the border is rendered as the topmost layer, visible above the cell fill color.
+  - **Scenario 2:** No diagonal cells present (all transitions are cross-state)
+    - **Given** the input dataset contains no consecutive records in the same state
+    - **When** the grid is rendered
+    - **Then** no diagonal borders are drawn and no error is raised; the diagonal cells render as ordinary zero-count / zero-probability cells.
+- **Business Rules:** The diagonal border is a fixed visual element controlled by `DSPStyleContext`; its linewidth and color are not user-configurable.
+
+#### USER STORY-8.4: In-Cell Data Annotations & Axis Readability
+- **User Story:** As a Report Reader, I want to read the exact numerical value inside each heatmap cell and clearly read all state names on the axes, so that I can extract precise figures without referencing the color bar and without tilting my head to read labels.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** In-cell annotation with adaptive text color
+    - **Given** the heatmap grids are rendered
+    - **Then** the exact numerical value is printed in the center of every cell.
+    - **And** Count values are formatted as comma-separated integers (e.g., `210,350`).
+    - **And** Probability values are formatted as two-decimal floats (e.g., `0.96`).
+    - **And** the annotation text color (black `#000000` or white `#FFFFFF`) is automatically selected based on the WCAG 2.1 relative luminance of the cell's background color: white text on dark backgrounds (luminance < 0.179), black text on light backgrounds (luminance ≥ 0.179).
+  - **Scenario 2:** X-axis label auto-rotation for long state names
+    - **Given** one or more categorical state names on the X-axis exceed the standard bounding box (e.g., names longer than 8 characters or more than 6 states present)
+    - **When** the chart is rendered
+    - **Then** all X-axis tick labels are automatically rotated to 45 degrees with right-aligned horizontal alignment to prevent text overlap.
+  - **Scenario 3:** Zero-count cell annotation
+    - **Given** a transition pair has never been observed (count = 0)
+    - **When** the chart is rendered
+    - **Then** the cell is annotated with `"0"` (count panel) and `"0.00"` (probability panel) in an appropriate contrast color.
+- **Business Rules:** In-cell annotations are always rendered; there is no user flag to suppress them. Luminance inversion uses the WCAG 2.1 relative luminance formula (identical to that used by `validate_grayscale_contrast()` in `metrics.py`), ensuring consistency across the codebase.
+
 ## 3. Non-Functional Requirements (NFRs)
 These define how the system must behave, beyond its specific features.
 
@@ -347,3 +422,9 @@ These define how the system must behave, beyond its specific features.
 - **Domain-Specific Palette:** A user-supplied color mapping (`state → hex`) that overrides the default Petroff palette for specific categorical states, subject to grayscale contrast validation (minimum 3:1 luminance ratio between adjacent states).
 - **Proportional Stacked Bar:** A rendering unit used in Aggregation Mode. Each bar represents one time bucket and is divided into colored segments whose widths are proportional to the percentage of time spent in each categorical state during that bucket.
 - **EventOverlay:** A global annotation rendered across all Gantt panels simultaneously — a dashed vertical line for point-in-time events or a semi-transparent shaded band for duration events — used to contextualize state data against external milestones or system-wide triggers.
+- **Transition Matrix:** A square N×N matrix where cell [i, j] records the count (or probability) of a consecutive state change from state i (current) to state j (next), derived by scanning sorted chronological state records and counting adjacent-pair occurrences.
+- **Row-Normalized Probability:** The conditional probability P(next = j | current = i), computed by dividing each cell in a count row by that row's total count. Each row in the resulting probability matrix sums to exactly 1.0 (or 0.0 for states that never appear as a source).
+- **Self-Transition:** A consecutive state record pair where the current and next state labels are identical (i == j); occupies the main diagonal of the transition matrix and typically represents state persistence rather than a phase change.
+- **Log Scale Colormap:** A color mapping applied to the Count panel that normalizes cell values using log(1 + count) (via LogNorm(vmin=1)), ensuring that transitions spanning multiple orders of magnitude remain individually visible.
+- **Dual-Panel Heatmap:** The 1:1 horizontally split canvas pattern used by dp transition, where the left panel renders count data with a warm gradient and the right panel renders probability data with a cool gradient.
+- **Cell Luminance Inversion:** An automatic contrast mechanism that selects black (#000000) or white (#FFFFFF) for in-cell annotation text based on the WCAG 2.1 relative luminance of the cell background fill color, using threshold 0.179.
