@@ -378,3 +378,66 @@ def test_autoadjust_xticklabels_single_label_is_noop():
     ax.set_xticklabels(["only-one-long-label"])
     builder.autoadjust_xticklabels(ax)   # must not raise
     plt.close(fig)
+
+
+# ── DSPStyleContext Gantt fields ───────────────────────────────────────────────
+
+
+def test_gantt_min_px_width_default_value():
+    """Default gantt_min_px_width must equal 2.0 as per spec."""
+    ctx = DSPStyleContext()
+    assert ctx.gantt_min_px_width == pytest.approx(2.0)
+
+
+def test_gantt_min_px_width_is_immutable():
+    """gantt_min_px_width must be immutable (frozen dataclass)."""
+    ctx = DSPStyleContext()
+    with pytest.raises((AttributeError, TypeError)):
+        ctx.gantt_min_px_width = 5.0  # type: ignore[misc]
+
+
+# ── gantt_canvas context manager ──────────────────────────────────────────────
+
+
+def test_gantt_canvas_yields_correct_panel_count():
+    """gantt_canvas should yield exactly n_channels Axes."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.gantt_canvas(n_channels=3) as (fig, axes):
+        assert len(axes) == 3
+        plt.close(fig)
+
+
+def test_gantt_canvas_only_bottom_panel_has_xticklabels():
+    """Upper panels must have X-tick labels suppressed."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.gantt_canvas(n_channels=3) as (fig, axes):
+        for ax in axes[:-1]:
+            assert not ax.get_xticklabels(minor=False) or all(
+                t.get_visible() is False or t.get_text() == ""
+                for t in ax.get_xticklabels()
+            )
+        plt.close(fig)
+
+
+def test_gantt_canvas_raises_on_zero_channels():
+    """n_channels < 1 must raise ValueError."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with pytest.raises(ValueError, match="n_channels"):
+        with builder.gantt_canvas(n_channels=0):
+            pass
+
+
+def test_gantt_canvas_warns_on_too_many_channels():
+    """n_channels > 20 must emit UserWarning."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with pytest.warns(UserWarning, match="exceeds 20"):
+        with builder.gantt_canvas(n_channels=21) as (fig, _):
+            plt.close(fig)
+
+
+def test_gantt_canvas_single_channel():
+    """A single-channel gantt canvas must succeed and close cleanly."""
+    builder = CanvasBuilder(DSPStyleContext())
+    with builder.gantt_canvas(n_channels=1) as (fig, axes):
+        assert len(axes) == 1
+        plt.close(fig)

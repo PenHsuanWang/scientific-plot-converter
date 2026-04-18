@@ -6,6 +6,7 @@ layout, four-sided mirror ticks, and the Petroff-compliant color palette
 across all DSPrinter output.
 """
 
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Final, Generator
@@ -76,6 +77,11 @@ class DSPStyleContext:
     # preventing datetime strings and other long tokens from crowding.
     tick_label_rotation_threshold: int = 6
     tick_label_max_rotation: float = 45.0
+
+    # ── Gantt chart constants ──────────────────────────────────────────────
+    # Minimum rendered pixel width for a state span before auto-aggregation
+    # is triggered (anti-aliasing threshold; US-7.2).
+    gantt_min_px_width: float = 2.0
 
 
 #: Module-level singleton — the one authoritative style instance.
@@ -318,6 +324,79 @@ class CanvasBuilder:
         self.add_three_tier_typography(fig, project, status, context)
         try:
             yield fig, ax_main, ax_ratio
+        finally:
+            plt.close(fig)
+
+    @contextmanager
+    def gantt_canvas(
+        self,
+        n_channels: int,
+        figsize: tuple[float, float] | None = None,
+        project: str | None = None,
+        status: str | None = None,
+        context: str | None = None,
+    ) -> Generator[tuple[Figure, list[Axes]], None, None]:
+        """Yield a faceted N-panel Gantt figure with a shared X-axis.
+
+        Builds an N-row ``GridSpec`` with ``hspace=0`` so all panels are
+        vertically fused.  All rows share the same X axis; only the
+        bottom-most panel shows X-tick text labels.  Figure height
+        auto-scales to ``max(4.0, 2.5 × N)`` inches.
+
+        A :class:`UserWarning` is emitted when *n_channels* > 20 because
+        panels become too small to read reliably at standard DPI.
+
+        :param n_channels: Number of independent channel/entity panels (≥ 1).
+        :type n_channels: int
+        :param figsize: Override auto-scaled ``(width, height)`` in inches.
+        :type figsize: tuple[float, float] or None
+        :param project: Tier-1 brand / project tag.
+        :type project: str or None
+        :param status: Tier-2 status label.
+        :type status: str or None
+        :param context: Tier-3 context string.
+        :type context: str or None
+        :yields: ``(Figure, list[Axes])`` ready for Gantt rendering.
+        :raises ValueError: If *n_channels* is less than 1.
+        """
+        if n_channels < 1:
+            raise ValueError("n_channels must be at least 1.")
+        if n_channels > 20:
+            warnings.warn(
+                f"n_channels={n_channels} exceeds 20; panels may be too small"
+                " to read at standard DPI.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        height = max(4.0, 2.5 * n_channels)
+        fig_size = figsize or (12.0, height)
+
+        self._apply_global_style()
+        fig = plt.figure(figsize=fig_size)
+        gs = gridspec.GridSpec(n_channels, 1, hspace=0, figure=fig)
+
+        axes: list[Axes] = []
+        for i in range(n_channels):
+            shared = axes[0] if i > 0 else None
+            ax = (
+                fig.add_subplot(gs[i], sharex=shared)
+                if shared is not None
+                else fig.add_subplot(gs[i])
+            )
+            axes.append(ax)
+
+        self._apply_margins(fig, hspace=0.0)
+        for ax in axes:
+            self._apply_axis_styling(ax)
+
+        # Suppress X-tick text labels on every panel except the bottom one
+        for ax in axes[:-1]:
+            ax.tick_params(labelbottom=False)
+
+        self.add_three_tier_typography(fig, project, status, context)
+        try:
+            yield fig, axes
         finally:
             plt.close(fig)
 

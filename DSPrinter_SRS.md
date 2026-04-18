@@ -228,6 +228,96 @@
     - **Then** the plot is generated applying all the rules and stylings defined in the YAML file.
 - **Business Rules:** The corporate theme (Primary and Secondary hex colors) must be configurable via an external file.
 
+### EPIC-7: Multi-Channel Categorical State Gantt
+**Description:** Provide a `dp gantt` subcommand that renders longitudinal categorical state timelines across multiple independent channels (entities) in vertically-stacked, time-aligned panels. The chart automatically aggregates high-density data to prevent visual aliasing, supports global event overlays, allows domain-specific color palettes, and displays per-channel summary statistics — all while inheriting the core three-tier typography and golden-margin style system.
+
+#### USER STORY-7.1: Faceted Multi-Panel Layout with Shared X-Axis
+- **User Story:** As a Data Analyst, I want to plot the categorical state timelines of multiple distinct entities in vertically stacked panels sharing a single X-axis, so that I can easily spot correlations or synchronous state changes across different parts of the system.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Multi-channel canvas division
+    - **Given** a dataset containing temporal state data for two or more distinct entities specified via `--channel`
+    - **When** the `dp gantt` command is executed
+    - **Then** the canvas is divided into equal-height stacked horizontal panels — one per channel
+    - **And** all panels share the exact same X-axis time scale with pixel-perfect vertical alignment.
+  - **Scenario 2:** X-axis label suppression on upper panels
+    - **Given** a multi-panel layout is generated
+    - **When** the chart is rendered
+    - **Then** only the bottom-most panel displays X-axis datetime text labels; all upper panels display tick marks only (labels hidden via `tick_params(labelbottom=False)`).
+  - **Scenario 3:** Single-channel degenerate case
+    - **Given** only one channel is present in the data
+    - **When** the chart is rendered
+    - **Then** a single panel is displayed with full X-axis labels as in any other standard plot type.
+  - **Scenario 4:** Missing required column
+    - **Given** the `--time` or `--state` column name does not exist in the input file
+    - **When** the command is executed
+    - **Then** the CLI exits with a clear error message identifying the missing column and no output file is created.
+- **Business Rules:** Panel heights are equal and locked; they cannot be customized per-channel via CLI flags. All three-tier typography, golden margin, mirror tick, and Petroff palette rules from EPIC-2 apply to the entire canvas without modification.
+
+#### USER STORY-7.2: Zero-Config High-Density Data Aggregation
+- **User Story:** As a Domain Expert, I want the system to automatically aggregate highly compressed temporal data when viewing long timeframes, so that I do not lose visibility of brief but critical state occurrences.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Aggregation mode activated (high-density data)
+    - **Given** a data density where state spans would render narrower than a 2-pixel visual threshold on the current canvas dimensions and DPI
+    - **When** the chart is generated
+    - **Then** the system automatically enters "Aggregation Mode," grouping data into fixed time buckets (hourly or daily, selected automatically) and rendering proportional stacked bars showing the percentage of time spent in each state per bucket.
+  - **Scenario 2:** Exact interval rendering (low-density data)
+    - **Given** a timeframe where state spans are wide enough to be fully legible (rendered span width ≥ 2 pixels)
+    - **When** the chart is generated
+    - **Then** the system renders exact horizontal Gantt bars with precise start and end timestamps — no aggregation applied.
+  - **Scenario 3:** Zero-config mode detection
+    - **Given** any valid `dp gantt` dataset
+    - **When** the chart is generated
+    - **Then** the aggregation mode is selected entirely by internal heuristics (canvas pixel width ÷ total time span ÷ minimum state duration); no user flag is required or available to override this decision.
+- **Business Rules:** The pixel-width threshold (2 px) is an internal constant in `DSPStyleContext` and is not user-configurable. Time bucket granularity (hourly or daily) is selected automatically based on the total visible time span.
+
+#### USER STORY-7.3: Global Event Overlays
+- **User Story:** As an Operations Manager, I want to overlay global system events or domain-wide milestones across all entity panels, so that I can visually assess how external factors impact the states of individual entities.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Single-point event overlay
+    - **Given** event data containing a single ISO-8601 timestamp provided via `--events`
+    - **When** the chart is rendered
+    - **Then** a dashed vertical line spans the full height of the main canvas, passing synchronously through all entity panels.
+  - **Scenario 2:** Duration event overlay
+    - **Given** event data containing a start and end ISO-8601 timestamp
+    - **When** the chart is rendered
+    - **Then** a semi-transparent shaded region spans the full height of the canvas across all panels for the defined duration.
+  - **Scenario 3:** No events provided
+    - **Given** the `--events` flag is omitted
+    - **When** the chart is rendered
+    - **Then** the chart renders normally with no overlay artifacts or layout shift.
+  - **Scenario 4:** Event timestamp outside visible time range
+    - **Given** an event timestamp that falls fully outside the plotted X-axis range
+    - **When** the chart is rendered
+    - **Then** the event overlay is silently omitted and no error is raised; a warning is printed to stdout.
+- **Business Rules:** Event overlays are rendered as the topmost layer, visually above all Gantt bars and aggregation bins. Event marker colors and line styles must be visually distinct from all categorical state colors to prevent ambiguity.
+
+#### USER STORY-7.4: Domain Color Mapping, Row-Level Statistics & Unified Legend
+- **User Story:** As a System User, I want the chart to support domain-specific color mapping for categorical states, display local statistics for each entity, and produce a unified legend, so that the chart is immediately interpretable without external references.
+- **Acceptance Criteria (BDD Format):**
+  - **Scenario 1:** Domain-specific palette override
+    - **Given** the user provides a `--domain-palette` argument (a JSON/YAML mapping of `state → hex color`)
+    - **When** the chart is rendered
+    - **Then** the specified colors are applied to the corresponding categorical states, overriding the default Petroff sequence.
+    - **And** each provided color must maintain a grayscale luminance contrast ratio of at least 3:1 against adjacent-state colors; if this is violated, a warning is emitted and rendering continues.
+  - **Scenario 2:** Default Petroff palette applied when no domain palette is specified
+    - **Given** no `--domain-palette` is provided
+    - **When** the chart is rendered
+    - **Then** the default Petroff palette is assigned to categorical states in order of first appearance in the data.
+  - **Scenario 3:** Row-level summary statistics
+    - **Given** the multi-panel layout is generated
+    - **When** the chart is finalized
+    - **Then** each panel automatically computes and displays its own summary metrics (state distribution percentages and total N count) aligned to the right margin of its respective row.
+    - **And** the statistics text fits entirely within the predefined right margin without causing the main data canvas area to shrink.
+  - **Scenario 4:** Unified legend at the bottom of the canvas
+    - **Given** the chart contains multiple categorical state colors and/or event overlay styles
+    - **When** the chart is finalized
+    - **Then** a single comprehensive legend is auto-generated at the bottom of the canvas, documenting all categorical state colors and all event line/shading styles used.
+  - **Scenario 5:** Empty channel (no data in range)
+    - **Given** a specified channel has no state records within the plotted time range
+    - **When** the chart is rendered
+    - **Then** the panel is rendered as an empty row with a centered "No Data" annotation; no error is raised.
+- **Business Rules:** Row-level statistics text uses 10 pt Regular weight, consistent with the stats box rule in US-2.6. Domain palette overrides are applied per-run only and must not mutate the global `DSPStyleContext`. The 3:1 grayscale contrast invariant is enforced at palette construction time with a clear warning; rendering is not blocked.
+
 ## 3. Non-Functional Requirements (NFRs)
 These define how the system must behave, beyond its specific features.
 
@@ -251,3 +341,9 @@ These define how the system must behave, beyond its specific features.
 - **Petroff Palette:** A colorblind-accessible, grayscale-distinguishable color set based on Petroff principles, using dark blue, orange, dark red, and gray as primary colors. Replaces high-saturation software defaults.
 - **Composite Chart (7:3 Split):** A two-panel layout where the main data panel occupies 70% of the canvas height and a ratio/residual panel occupies the lower 30%, with a shared, pixel-aligned X-axis.
 - **Residual / Ratio Panel:** The lower panel in a composite chart displaying derived metrics such as `Data / Prediction`, `Residuals [σ]`, or period-over-period change rate.
+- **Channel:** A named, independent entity (e.g., a server, a CI/CD pipeline stage, a department) whose categorical state is tracked over time in a Gantt chart. Each channel occupies one dedicated panel in the faceted layout.
+- **Aggregation Mode:** A zero-config rendering mode automatically activated when data density exceeds the visual pixel threshold. Replaces exact Gantt bars with proportional stacked bins representing the fraction of time spent in each categorical state per time bucket.
+- **Gantt Bar:** A horizontal bar spanning a precise start-to-end time interval, representing the duration of a single categorical state for one channel in exact-interval rendering mode.
+- **Domain-Specific Palette:** A user-supplied color mapping (`state → hex`) that overrides the default Petroff palette for specific categorical states, subject to grayscale contrast validation (minimum 3:1 luminance ratio between adjacent states).
+- **Proportional Stacked Bar:** A rendering unit used in Aggregation Mode. Each bar represents one time bucket and is divided into colored segments whose widths are proportional to the percentage of time spent in each categorical state during that bucket.
+- **EventOverlay:** A global annotation rendered across all Gantt panels simultaneously — a dashed vertical line for point-in-time events or a semi-transparent shaded band for duration events — used to contextualize state data against external milestones or system-wide triggers.

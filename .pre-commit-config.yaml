@@ -39,7 +39,7 @@ repos:
       - id: mypy
         name: mypy (strict type checking)
         language: system
-        entry: mypy
+        entry: .venv/bin/mypy
         types: [python]
         pass_filenames: false
         args: [src/]

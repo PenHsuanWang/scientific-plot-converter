@@ -2,11 +2,15 @@
 
 import numpy as np
 import pytest
+from datetime import datetime, timedelta
 
 from dsprinter.stats.metrics import (
     calculate_metrics,
     calculate_ratio,
     calculate_smart_bins,
+    compute_state_bins,
+    state_distribution,
+    validate_grayscale_contrast,
 )
 
 
@@ -179,3 +183,97 @@ def test_calculate_ratio_preserves_shape():
     y1 = np.ones((5,))
     y2 = np.ones((5,))
     assert calculate_ratio(y1, y2).shape == (5,)
+
+
+# ── state_distribution ────────────────────────────────────────────────────────
+
+
+def _dt(offset_secs: float) -> datetime:
+    """Return a datetime offset from a fixed epoch for testing."""
+    return datetime(2024, 1, 1) + timedelta(seconds=offset_secs)
+
+
+def test_state_distribution_empty_returns_empty():
+    assert state_distribution([]) == {}
+
+
+def test_state_distribution_single_record():
+    rec = [(_dt(0), _dt(100), "running")]
+    result = state_distribution(rec)
+    assert result == pytest.approx({"running": 100.0})
+
+
+def test_state_distribution_two_equal_states():
+    recs = [(_dt(0), _dt(50), "A"), (_dt(50), _dt(100), "B")]
+    result = state_distribution(recs)
+    assert result["A"] == pytest.approx(50.0, rel=1e-3)
+    assert result["B"] == pytest.approx(50.0, rel=1e-3)
+
+
+def test_state_distribution_percentage_sums_to_100():
+    recs = [
+        (_dt(0), _dt(30), "X"),
+        (_dt(30), _dt(70), "Y"),
+        (_dt(70), _dt(100), "Z"),
+    ]
+    result = state_distribution(recs)
+    assert sum(result.values()) == pytest.approx(100.0, rel=1e-4)
+
+
+def test_state_distribution_zero_duration_ignored():
+    recs = [(_dt(0), _dt(0), "zero"), (_dt(0), _dt(60), "valid")]
+    result = state_distribution(recs)
+    assert "zero" not in result
+
+
+# ── compute_state_bins ────────────────────────────────────────────────────────
+
+
+def test_compute_state_bins_empty_records():
+    result = compute_state_bins([], timedelta(hours=1), (_dt(0), _dt(3600)))
+    assert result == []
+
+
+def test_compute_state_bins_single_bucket_full_coverage():
+    recs = [(_dt(0), _dt(3600), "on")]
+    bins = compute_state_bins(recs, timedelta(hours=1), (_dt(0), _dt(3600)))
+    assert len(bins) == 1
+    assert bins[0]["on"] == pytest.approx(1.0, rel=1e-4)
+
+
+def test_compute_state_bins_proportions_sum_lte_one():
+    recs = [(_dt(0), _dt(1800), "A"), (_dt(1800), _dt(3600), "B")]
+    bins = compute_state_bins(recs, timedelta(hours=1), (_dt(0), _dt(3600)))
+    for b in bins:
+        assert sum(b.values()) <= 1.0 + 1e-6
+
+
+def test_compute_state_bins_bucket_count_matches_range():
+    recs = [(_dt(0), _dt(7200), "on")]
+    bins = compute_state_bins(recs, timedelta(hours=1), (_dt(0), _dt(7200)))
+    assert len(bins) == 2
+
+
+# ── validate_grayscale_contrast ───────────────────────────────────────────────
+
+
+def test_validate_grayscale_contrast_identical_colors_fail():
+    # Two identical colors → ratio 1.0 < 3.0
+    violations = validate_grayscale_contrast(["#000000", "#000000"])
+    assert len(violations) == 1
+
+
+def test_validate_grayscale_contrast_black_white_pass():
+    violations = validate_grayscale_contrast(["#000000", "#ffffff"])
+    assert violations == []
+
+
+def test_validate_grayscale_contrast_empty_and_single():
+    assert validate_grayscale_contrast([]) == []
+    assert validate_grayscale_contrast(["#aabbcc"]) == []
+
+
+def test_validate_grayscale_contrast_malformed_hex_skipped():
+    # Malformed entries must not raise — they should be skipped
+    violations = validate_grayscale_contrast(["#zzzzzz", "#ffffff"])
+    assert isinstance(violations, list)

@@ -1,6 +1,8 @@
+import json
 import numpy as np
 import polars as pl
 import pytest
+from datetime import datetime, timedelta
 from typer.testing import CliRunner
 
 from dsprinter.cli import app
@@ -568,3 +570,151 @@ def test_hist1d_multi_column_missing_second_col_exits_1(sample_csv, tmp_path):
     )
     assert result.exit_code == 1
     assert "Error: Column 'NoSuchCol' not found" in result.stdout
+
+
+# ── gantt command ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def gantt_csv(tmp_path):
+    """Minimal state-log CSV with two channels over 4 rows each."""
+    base = datetime(2024, 3, 1)
+    rows = []
+    for ch in ["alpha", "beta"]:
+        states = ["idle", "running", "idle", "error"]
+        for i, state in enumerate(states):
+            ts = base + timedelta(hours=i * 6)
+            rows.append(f"{ch},{ts.isoformat()},{state}")
+    content = "channel,timestamp,state\n" + "\n".join(rows)
+    p = tmp_path / "gantt_data.csv"
+    p.write_text(content)
+    return p
+
+
+def test_gantt_happy_path(gantt_csv, tmp_path):
+    """Gantt command must exit 0 and write a PDF."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Successfully generated Gantt chart" in result.stdout
+    assert out_file.exists()
+
+
+def test_gantt_default_output_in_figure_out(gantt_csv, tmp_path, monkeypatch):
+    """Default output must land in figure_out/ under CWD."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app, ["gantt", "--input", str(gantt_csv)]
+    )
+    assert result.exit_code == 0, result.output
+    expected = tmp_path / "figure_out" / "gantt_data_gantt.pdf"
+    assert expected.exists()
+
+
+def test_gantt_missing_column_exits_nonzero(gantt_csv, tmp_path):
+    """Missing column must produce exit_code=1 and a clear error message."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--state-col", "no_such_col", "--output", str(out_file)],
+    )
+    assert result.exit_code == 1
+    assert "not found" in result.stdout.lower() or result.exit_code != 0
+
+
+def test_gantt_with_point_event(gantt_csv, tmp_path):
+    """Gantt command must accept a valid events JSON file."""
+    out_file = tmp_path / "out.pdf"
+    events = [{"type": "point", "timestamp": "2024-03-01T12:00:00", "label": "deploy"}]
+    events_file = tmp_path / "events.json"
+    events_file.write_text(json.dumps(events))
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--events", str(events_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_gantt_with_duration_event(gantt_csv, tmp_path):
+    """Duration events must also be rendered without error."""
+    out_file = tmp_path / "out.pdf"
+    events = [{"type": "duration", "start": "2024-03-01T06:00:00",
+               "end": "2024-03-01T18:00:00", "label": "maintenance"}]
+    events_file = tmp_path / "events.json"
+    events_file.write_text(json.dumps(events))
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--events", str(events_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_gantt_bad_events_json_exits_nonzero(gantt_csv, tmp_path):
+    """Malformed events JSON must exit with code 1."""
+    out_file = tmp_path / "out.pdf"
+    events_file = tmp_path / "bad.json"
+    events_file.write_text("{not valid json")
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--events", str(events_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 1
+
+
+def test_gantt_with_domain_palette(gantt_csv, tmp_path):
+    """A domain palette JSON with valid colors must be accepted."""
+    out_file = tmp_path / "out.pdf"
+    palette = {"idle": "#2196f3", "running": "#4caf50", "error": "#f44336"}
+    palette_file = tmp_path / "palette.json"
+    palette_file.write_text(json.dumps(palette))
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--palette", str(palette_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+
+
+def test_gantt_bad_palette_json_exits_nonzero(gantt_csv, tmp_path):
+    """A palette file with invalid hex colors must exit with code 1."""
+    out_file = tmp_path / "out.pdf"
+    palette_file = tmp_path / "bad_palette.json"
+    palette_file.write_text('{"idle": "notacolor"}')
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--palette", str(palette_file), "--output", str(out_file)],
+    )
+    assert result.exit_code == 1
+
+
+def test_gantt_nonexistent_input_exits_nonzero(tmp_path):
+    """A missing input CSV must produce exit code 1."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", "/no/such/file.csv", "--output", str(out_file)],
+    )
+    assert result.exit_code != 0
+
+
+def test_gantt_typography_options_accepted(gantt_csv, tmp_path):
+    """Three-tier typography flags must be accepted without error."""
+    out_file = tmp_path / "out.pdf"
+    result = runner.invoke(
+        app,
+        ["gantt", "--input", str(gantt_csv),
+         "--project", "Acme", "--status", "Draft", "--context", "Q1-2024",
+         "--output", str(out_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()

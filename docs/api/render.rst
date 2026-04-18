@@ -10,3 +10,8 @@ Render Engine & Plots
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. automodule:: dsprinter.render.gantt
+   :members:
+   :undoc-members:
+   :show-inheritance:
