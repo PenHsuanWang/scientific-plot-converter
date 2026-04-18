@@ -32,8 +32,10 @@ repos:
           - flake8-docstrings>=1.7.0
 
   # ── mypy: strict static type checking ────────────────────────────────────
-  # Uses `language: system` so it resolves imports from the project venv.
-  # Run `uv pip install -e ".[dev]"` before committing.
+  # Uses `language: system` so mypy resolves third-party imports (polars,
+  # matplotlib, typer, etc.) from the active environment.
+  # Locally: run `uv pip install -e ".[dev]"` once before first commit.
+  # CI: `pip install -e ".[dev]"` runs before pre-commit (see ci.yml).
   - repo: local
     hooks:
       - id: mypy

@@ -93,7 +93,7 @@ Invoke the `requirements-analysis` skill, or manually:
 Respect the dependency chain:
 
 ```
-engine.py  →  metrics.py  →  plots.py  →  cli.py  →  test_cli.py
+engine.py  →  metrics.py  →  plots.py / gantt.py  →  cli.py  →  test_*.py
 ```
 
 | File | What changes |
@@ -101,8 +101,12 @@ engine.py  →  metrics.py  →  plots.py  →  cli.py  →  test_cli.py
 | `src/dsprinter/render/engine.py` | `DSPStyleContext` constants, `CanvasBuilder` helpers |
 | `src/dsprinter/stats/metrics.py` | Pure computation functions (no I/O, no matplotlib) |
 | `src/dsprinter/render/plots.py` | `render_*` functions using `CanvasBuilder` |
+| `src/dsprinter/render/gantt.py` | New render module: domain value objects, `render_gantt()` |
 | `src/dsprinter/cli.py` | Typer command + options; calls render functions |
 | `tests/test_cli.py` | New test classes covering all new paths |
+
+> When adding a brand-new render module (e.g. `gantt.py`) rather than extending `plots.py`,
+> also add a `docs/api/render.rst` automodule entry and rebuild Sphinx to confirm zero warnings.
 
 ### Step 3 — Testing Protocol
 
@@ -173,9 +177,6 @@ add an entirely new module (then add a new `.rst` stub and add it to `index.rst`
 ### Step 6 — Pre-Commit & Final Verification
 
 ```bash
-# Activate venv first (required by mypy system hook)
-source .venv/bin/activate
-
 # Run all hooks without committing (dry run)
 pre-commit run --all-files
 
@@ -187,6 +188,9 @@ git commit -m "feat: <description>"
 #   trailing-whitespace, end-of-file-fixer, check-yaml,
 #   check-added-large-files, ruff --fix, flake8, mypy
 ```
+
+> The `mypy` hook uses `entry: .venv/bin/mypy` — it resolves the project virtual
+> environment automatically. Manual venv activation is **not** required before committing.
 
 ---
 
@@ -357,6 +361,11 @@ BOTTOM = 0.12   # room for X-axis title
 | `savefig` | No `bbox_inches="tight"` | `tight` overrides the carefully set `subplots_adjust` margins |
 | `cycler` import | `from cycler import cycler as make_cycler` | `matplotlib.cycler` has no type stubs; direct import is fully typed |
 | Style enforcement | Zero-config locked theme | No per-call overrides possible — all charts are visually consistent by default |
+| Gantt multi-panel | `GridSpec(n_channels, 1, hspace=0)` + `sharex` | Fuses rows into a single visual block; pixel-perfect X-axis alignment across all panels |
+| Aggregation decision | `AggregationEngine.should_aggregate()` heuristic | Canvas px / total seconds × min duration < `gantt_min_px_width (2.0)` triggers hourly/daily bucketing; zero-config, no user flag required |
+| `DomainPalette` | Regular class, defensive copy, non-frozen | Dict fields are mutable — frozen dataclass is not allowed; WCAG 2.1 contrast check emits `UserWarning` but never blocks rendering |
+| matplotlib untyped calls | `# type: ignore[no-untyped-call]` at call sites | `mdates.date2num`, `AutoDateLocator`, `ConciseDateFormatter` lack py.typed stubs; inline ignores keep mypy strict without suppressing the whole file |
+| pre-commit mypy entry | `entry: .venv/bin/mypy` | Absolute path to venv binary; eliminates the "Executable mypy not found" failure that occurred when users committed without activating the venv |
 
 ---
 
@@ -405,3 +414,4 @@ The `deploy` job rebuilds from source on every `master` push.
 | `002-bug-fixes-docs-and-97-test-suite.md` | Bug fixes (output path, three-tier annotation), unit test expansion to 97 tests, README quick-start with `demo_histogram_data.csv`, `.gitignore` patterns for `.coverage`/`__pycache__` |
 | `003-multi-column-hist-gh-pages-font-fixes.md` | Multi-column histogram (`--x` repeated flag), gh-pages deploy workflow, font size fixes, `docs/_build/` removed from git tracking |
 | `004-ci-fixes-typography-spec-pr-setup.md` | Ticklabel auto-rotation (US-2.4), quantitative typography spec US-2.6, `axes.labelsize` 10pt→12pt bug fix, CI branch targets fixed (`main`→`dev`/`master`), PR template, pre-commit Python version fix |
+| `005-gantt-feature-epic7.md` | EPIC-7: Multi-Channel Categorical State Gantt — new `render/gantt.py` module, `gantt_canvas()` in `CanvasBuilder`, `state_distribution` / `compute_state_bins` / `validate_grayscale_contrast` in `metrics.py`, `dp gantt` CLI command, 35 new tests (139 total), SRS/SDD updated, README §4 added, pre-commit mypy entry fixed to `.venv/bin/mypy` |
